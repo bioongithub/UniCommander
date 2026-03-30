@@ -1,0 +1,3 @@
+C:/Work/UniCommander/build/CMakeFiles/unicommander.dir
+C:/Work/UniCommander/build/CMakeFiles/ALL_BUILD.dir
+C:/Work/UniCommander/build/CMakeFiles/ZERO_CHECK.dir
