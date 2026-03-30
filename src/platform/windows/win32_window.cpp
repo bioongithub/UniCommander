@@ -1,7 +1,12 @@
 #include "win32_window.h"
 #include <windowsx.h>
+#include <filesystem>
 
 static constexpr const char* CLASS_NAME = "UniCommanderWnd";
+static constexpr int ROW_H    = 18;
+static constexpr int HEADER_H = 20;
+
+// ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 Win32Window::Win32Window()
     : m_hinstance(GetModuleHandle(nullptr))
@@ -35,6 +40,9 @@ bool Win32Window::create(const std::string& title, int width, int height)
         this
     );
 
+    if (m_hwnd)
+        initPanels(std::filesystem::current_path().string());
+
     return m_hwnd != nullptr;
 }
 
@@ -65,6 +73,83 @@ void Win32Window::close()
         PostMessage(m_hwnd, WM_CLOSE, 0, 0);
 }
 
+// ── Rendering ─────────────────────────────────────────────────────────────────
+
+void Win32Window::renderDirectoryPanel(HDC hdc, RECT rect, uc::DirectoryPanel& panel)
+{
+    const int panelH = rect.bottom - rect.top;
+
+    // Ensure selected entry is scrolled into view
+    const int visibleRows = std::max(0, (panelH - HEADER_H - 2) / ROW_H);
+    panel.ensureVisible(visibleRows);
+
+    // Background
+    HBRUSH bgBrush = CreateSolidBrush(RGB(20, 20, 20));
+    FillRect(hdc, &rect, bgBrush);
+    DeleteObject(bgBrush);
+
+    // Border (blue when focused, gray otherwise)
+    HPEN borderPen = CreatePen(PS_SOLID, 1,
+                               panel.hasFocus() ? RGB(0, 120, 215) : RGB(80, 80, 80));
+    HPEN  oldPen   = (HPEN) SelectObject(hdc, borderPen);
+    HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+    Rectangle(hdc, rect.left, rect.top, rect.right, rect.bottom);
+    SelectObject(hdc, oldPen);
+    SelectObject(hdc, oldBrush);
+    DeleteObject(borderPen);
+
+    // Header — shows current path
+    RECT headerR = { rect.left + 1, rect.top + 1,
+                     rect.right - 1, rect.top + 1 + HEADER_H };
+    HBRUSH headerBrush = CreateSolidBrush(RGB(40, 40, 60));
+    FillRect(hdc, &headerR, headerBrush);
+    DeleteObject(headerBrush);
+
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, RGB(180, 180, 255));
+    RECT pathTextR = { headerR.left + 4, headerR.top,
+                       headerR.right - 4, headerR.bottom };
+    std::string pathStr = panel.getPath();
+    DrawTextA(hdc, pathStr.c_str(), -1, &pathTextR,
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+    // Entry rows
+    const auto& entries     = panel.entries();
+    const int   scrollOff   = panel.scrollOffset();
+    const int   selectedIdx = panel.selectedIndex();
+    int y = rect.top + 1 + HEADER_H;
+
+    for (int i = scrollOff;
+         i < (int)entries.size() && y + ROW_H <= rect.bottom - 1;
+         ++i, y += ROW_H)
+    {
+        bool selected = (i == selectedIdx);
+        RECT rowR = { rect.left + 1, y, rect.right - 1, y + ROW_H };
+
+        if (selected)
+        {
+            HBRUSH selBrush = CreateSolidBrush(
+                panel.hasFocus() ? RGB(0, 80, 160) : RGB(55, 55, 55));
+            FillRect(hdc, &rowR, selBrush);
+            DeleteObject(selBrush);
+        }
+
+        const auto& entry = entries[i];
+        COLORREF textColor =
+            selected          ? RGB(255, 255, 255) :
+            entry.isDir       ? RGB(100, 180, 255) :
+                                RGB(220, 220, 220);
+        SetTextColor(hdc, textColor);
+
+        std::string label =
+            (entry.isDir && entry.name != "..") ? "[" + entry.name + "]"
+                                                 : entry.name;
+        RECT textR = { rowR.left + 4, rowR.top, rowR.right - 4, rowR.bottom };
+        DrawTextA(hdc, label.c_str(), -1, &textR,
+                  DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    }
+}
+
 void Win32Window::paint(HDC hdc)
 {
     RECT cr;
@@ -75,32 +160,32 @@ void Win32Window::paint(HDC hdc)
     const int leftW = static_cast<int>(W * m_vRatio);
 
     // ── Panel rects ───────────────────────────────────────────────────────
-    RECT leftR   = { 0,              0,              leftW,             topH };
-    RECT rightR  = { leftW+DIVIDER_W, 0,             W,                 topH };
-    RECT bottomR = { 0,              topH+DIVIDER_W, W,                 H    };
-    RECT hDivR   = { 0,              topH,           W,                 topH+DIVIDER_W };
-    RECT vDivR   = { leftW,          0,              leftW+DIVIDER_W,   topH };
+    RECT leftR   = { 0,               0,              leftW,              topH };
+    RECT rightR  = { leftW+DIVIDER_W, 0,              W,                  topH };
+    RECT bottomR = { 0,               topH+DIVIDER_W, W,                  H    };
+    RECT hDivR   = { 0,               topH,           W,                  topH+DIVIDER_W };
+    RECT vDivR   = { leftW,           0,              leftW+DIVIDER_W,    topH };
 
-    // ── Fill dividers ─────────────────────────────────────────────────────
+    // ── Dividers ──────────────────────────────────────────────────────────
     HBRUSH divBrush = CreateSolidBrush(RGB(80, 80, 80));
     FillRect(hdc, &hDivR, divBrush);
     FillRect(hdc, &vDivR, divBrush);
     DeleteObject(divBrush);
 
-    // ── Fill panels ───────────────────────────────────────────────────────
+    // ── Directory panels ──────────────────────────────────────────────────
+    if (m_leftPanel)  renderDirectoryPanel(hdc, leftR,  *m_leftPanel);
+    if (m_rightPanel) renderDirectoryPanel(hdc, rightR, *m_rightPanel);
+
+    // ── Bottom panel (terminal placeholder) ───────────────────────────────
     HBRUSH panelBrush = CreateSolidBrush(RGB(30, 30, 30));
-    FillRect(hdc, &leftR,   panelBrush);
-    FillRect(hdc, &rightR,  panelBrush);
     FillRect(hdc, &bottomR, panelBrush);
     DeleteObject(panelBrush);
-
-    // ── Draw labels ───────────────────────────────────────────────────────
     SetTextColor(hdc, RGB(220, 220, 220));
     SetBkMode(hdc, TRANSPARENT);
-    DrawText(hdc, "left",   -1, &leftR,   DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    DrawText(hdc, "right",  -1, &rightR,  DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    DrawText(hdc, "bottom", -1, &bottomR, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    DrawText(hdc, "Terminal", -1, &bottomR, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
+
+// ── Window procedure ──────────────────────────────────────────────────────────
 
 LRESULT CALLBACK Win32Window::wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
@@ -130,11 +215,49 @@ LRESULT CALLBACK Win32Window::wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             return 0;
         }
         case WM_ERASEBKGND:
-            return 1;  // paint() covers every pixel; skip default erase
+            return 1;
 
         case WM_SIZE:
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
+
+        // ── Keyboard ──────────────────────────────────────────────────────
+        case WM_KEYDOWN:
+        {
+            if (!self) break;
+            auto* panel = self->focusedPanel();
+            if (!panel) break;
+
+            // Compute visible row count from current geometry
+            RECT cr; GetClientRect(hwnd, &cr);
+            const int topH        = static_cast<int>(cr.bottom * self->m_hRatio);
+            const int visibleRows = std::max(0, (topH - 2 - HEADER_H) / ROW_H);
+
+            switch (wp)
+            {
+                case VK_UP:
+                    panel->moveUp();
+                    panel->ensureVisible(visibleRows);
+                    InvalidateRect(hwnd, nullptr, FALSE);
+                    return 0;
+                case VK_DOWN:
+                    panel->moveDown();
+                    panel->ensureVisible(visibleRows);
+                    InvalidateRect(hwnd, nullptr, FALSE);
+                    return 0;
+                case VK_RETURN:
+                    panel->activate();
+                    InvalidateRect(hwnd, nullptr, FALSE);
+                    return 0;
+                case VK_TAB:
+                    self->switchFocus();
+                    InvalidateRect(hwnd, nullptr, FALSE);
+                    return 0;
+                default:
+                    break;
+            }
+            break;
+        }
 
         // ── Splitter drag ─────────────────────────────────────────────────
         case WM_LBUTTONDOWN:
@@ -156,6 +279,14 @@ LRESULT CALLBACK Win32Window::wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             {
                 self->m_drag = Drag::Vert;
                 SetCapture(hwnd);
+            }
+            else if (my < topH && self->m_leftPanel && self->m_rightPanel)
+            {
+                // Click inside a directory panel — transfer focus
+                bool clickLeft = (mx < leftW);
+                self->m_leftPanel->setFocus(clickLeft);
+                self->m_rightPanel->setFocus(!clickLeft);
+                InvalidateRect(hwnd, nullptr, FALSE);
             }
             return 0;
         }

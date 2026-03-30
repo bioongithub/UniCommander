@@ -1,6 +1,7 @@
 #pragma once
 #include "ui/base_window.h"
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <windows.h>
 
 class Win32Window final : public uc::BaseWindow
@@ -17,6 +18,7 @@ public:
 private:
     static LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
     void paint(HDC hdc);
+    void renderDirectoryPanel(HDC hdc, RECT rect, uc::DirectoryPanel& panel);
 
     HWND      m_hwnd      { nullptr };
     HINSTANCE m_hinstance { nullptr };

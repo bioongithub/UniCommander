@@ -5,7 +5,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-set(SOURCES src/main.cpp)
+set(SOURCES
+    src/main.cpp
+    src/ui/directory_panel.cpp
+)
 
 # ── Platform-specific sources and libraries ─────────────────────────────────
 if(WIN32)
