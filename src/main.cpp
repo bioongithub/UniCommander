@@ -1,7 +1,13 @@
-#include <iostream>
+#include "ui/window.h"
 
 int main()
 {
-    std::cout << "UniCommander v0.1.0\n";
+    auto window = createWindow();
+
+    if (!window->create("UniCommander", 800, 600))
+        return 1;
+
+    window->show();
+    window->run();
     return 0;
 }

@@ -41,4 +41,4 @@
 *.dwo
 
 # Build directory
-build/
+build*/
