@@ -1,5 +1,5 @@
 #pragma once
-#include "ui/window.h"
+#include "ui/base_window.h"
 
 #ifdef __OBJC__
 @class NSWindow;
@@ -9,7 +9,7 @@ using NSWindow    = struct objc_object;
 using AppDelegate = struct objc_object;
 #endif
 
-class CocoaWindow final : public uc::Window
+class CocoaWindow final : public uc::BaseWindow
 {
 public:
     CocoaWindow();
