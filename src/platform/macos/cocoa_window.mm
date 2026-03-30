@@ -22,7 +22,7 @@ bool CocoaWindow::create(const std::string& title, int width, int height)
     m_delegate = [[AppDelegate alloc] init];
     [NSApp setDelegate:m_delegate];
 
-    NSRect frame = NSMakeRect(0, 0, width, height);
+    NSRect frame  = NSMakeRect(0, 0, width, height);
     NSUInteger style = NSWindowStyleMaskTitled
                      | NSWindowStyleMaskClosable
                      | NSWindowStyleMaskResizable
@@ -32,7 +32,6 @@ bool CocoaWindow::create(const std::string& title, int width, int height)
                                            styleMask:style
                                              backing:NSBackingStoreBuffered
                                                defer:NO];
-
     [m_window setTitle:[NSString stringWithUTF8String:title.c_str()]];
     [m_window center];
     return m_window != nullptr;
@@ -56,8 +55,7 @@ void CocoaWindow::close()
         [m_window close];
 }
 
-// Factory
-std::unique_ptr<Window> createWindow()
+std::unique_ptr<uc::Window> createWindow()
 {
     return std::make_unique<CocoaWindow>();
 }

@@ -3,7 +3,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-class Win32Window final : public Window
+class Win32Window final : public uc::Window
 {
 public:
     Win32Window();

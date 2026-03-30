@@ -1,13 +1,11 @@
 #pragma once
 #include "ui/window.h"
 
-// Forward-declare X11 types to keep the header dependency-free.
+// Forward-declare Display without pulling in <X11/Xlib.h> (which defines
+// a conflicting 'Window' typedef in the global namespace).
 struct _XDisplay;
-using Display = _XDisplay;
-using XID     = unsigned long;
-using Window  = XID;
 
-class X11Window final : public ::Window
+class X11Window final : public uc::Window
 {
 public:
     X11Window();
@@ -19,7 +17,7 @@ public:
     void close() override;
 
 private:
-    Display* m_display { nullptr };
-    ::Window m_window  { 0 };
-    bool     m_running { false };
+    _XDisplay*    m_display { nullptr };
+    unsigned long m_window  { 0 };      // X11 Window is typedef'd to unsigned long
+    bool          m_running { false };
 };

@@ -1,6 +1,8 @@
 #pragma once
 #include <string>
 
+namespace uc {
+
 // Abstract base class for a file-browser panel (left or right pane).
 class Panel
 {
@@ -12,3 +14,5 @@ public:
     virtual void        refresh() = 0;   // re-reads directory contents
     virtual void        render()  = 0;   // redraws the panel
 };
+
+} // namespace uc

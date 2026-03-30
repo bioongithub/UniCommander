@@ -1,7 +1,7 @@
 #include "x11_window.h"
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
-#include <stdexcept>
+#include <X11/keysym.h>
 
 X11Window::X11Window()  = default;
 
@@ -35,11 +35,11 @@ bool X11Window::create(const std::string& title, int width, int height)
 
     XStoreName(m_display, m_window, title.c_str());
 
-    // Enable WM_DELETE_WINDOW so we can intercept the close button.
     Atom wm_delete = XInternAtom(m_display, "WM_DELETE_WINDOW", False);
     XSetWMProtocols(m_display, m_window, &wm_delete, 1);
 
-    XSelectInput(m_display, m_window, ExposureMask | KeyPressMask | StructureNotifyMask);
+    XSelectInput(m_display, m_window,
+                 ExposureMask | KeyPressMask | StructureNotifyMask);
     return true;
 }
 
@@ -66,12 +66,15 @@ void X11Window::run()
                 if (static_cast<Atom>(event.xclient.data.l[0]) == wm_delete)
                     m_running = false;
                 break;
+
             case KeyPress:
-                // Q or Escape quits
-                if (event.xkey.keycode == XKeysymToKeycode(m_display, XStringToKeysym("q")) ||
-                    event.xkey.keycode == XKeysymToKeycode(m_display, XStringToKeysym("Escape")))
+            {
+                KeySym key = XLookupKeysym(&event.xkey, 0);
+                if (key == XK_q || key == XK_Escape)
                     m_running = false;
                 break;
+            }
+
             default:
                 break;
         }
@@ -83,8 +86,7 @@ void X11Window::close()
     m_running = false;
 }
 
-// Factory
-std::unique_ptr<::Window> createWindow()
+std::unique_ptr<uc::Window> createWindow()
 {
     return std::make_unique<X11Window>();
 }

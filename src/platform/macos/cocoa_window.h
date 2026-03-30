@@ -1,7 +1,6 @@
 #pragma once
 #include "ui/window.h"
 
-// Forward-declare opaque Objective-C handle to avoid polluting C++ headers.
 #ifdef __OBJC__
 @class NSWindow;
 @class AppDelegate;
@@ -10,7 +9,7 @@ using NSWindow    = struct objc_object;
 using AppDelegate = struct objc_object;
 #endif
 
-class CocoaWindow final : public Window
+class CocoaWindow final : public uc::Window
 {
 public:
     CocoaWindow();

@@ -1,5 +1,4 @@
 #include "win32_window.h"
-#include <stdexcept>
 
 static constexpr const char* CLASS_NAME = "UniCommanderWnd";
 
@@ -15,14 +14,14 @@ Win32Window::~Win32Window()
 
 bool Win32Window::create(const std::string& title, int width, int height)
 {
-    WNDCLASSEX wc      = {};
-    wc.cbSize          = sizeof(wc);
-    wc.style           = CS_HREDRAW | CS_VREDRAW;
-    wc.lpfnWndProc     = wndProc;
-    wc.hInstance       = m_hinstance;
-    wc.hCursor         = LoadCursor(nullptr, IDC_ARROW);
-    wc.hbrBackground   = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
-    wc.lpszClassName   = CLASS_NAME;
+    WNDCLASSEX wc    = {};
+    wc.cbSize        = sizeof(wc);
+    wc.style         = CS_HREDRAW | CS_VREDRAW;
+    wc.lpfnWndProc   = wndProc;
+    wc.hInstance     = m_hinstance;
+    wc.hCursor       = LoadCursor(nullptr, IDC_ARROW);
+    wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+    wc.lpszClassName = CLASS_NAME;
 
     if (!RegisterClassEx(&wc))
         return false;
@@ -32,7 +31,7 @@ bool Win32Window::create(const std::string& title, int width, int height)
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT, width, height,
         nullptr, nullptr, m_hinstance,
-        this   // passed to WM_NCCREATE as CREATESTRUCT::lpCreateParams
+        this
     );
 
     return m_hwnd != nullptr;
@@ -97,8 +96,7 @@ LRESULT CALLBACK Win32Window::wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     }
 }
 
-// Factory
-std::unique_ptr<Window> createWindow()
+std::unique_ptr<uc::Window> createWindow()
 {
     return std::make_unique<Win32Window>();
 }
