@@ -47,17 +47,40 @@ uc::Panel           (include/ui/panel.h)          — pure abstract interface
   └── uc::TerminalPanel  (include/ui/terminal_panel.h)  — terminal (stub)
 ```
 
-`uc::BaseWindow` holds all state that is shared across platforms:
+`uc::BaseWindow` holds all state and logic that is shared across platforms:
 - Split ratios (`m_hRatio`, `m_vRatio`) and `Drag` state
 - `DIVIDER_W` and `HIT_ZONE` constants
-- Panel instances (`m_leftPanel`, `m_rightPanel`) and `initPanels()`
-- `focusedPanel()` and `switchFocus()` logic
+- Layout geometry: `computeLayout(W, H)` → `Layout { topH, leftW }`
+- Hit testing: `hitTest(mx, my, W, H)` → `Hit` enum (HorizDivider, VertDivider, LeftPanel, RightPanel, Bottom)
+- Panel instances (`m_leftPanel`, `m_rightPanel`), `initPanels()`, `leftPanel()`, `rightPanel()`
+- `focusedPanel()`, `switchFocus()`
+- Ratio setters `setHRatio()` / `setVRatio()` (include clamping to [0.1, 0.9])
 
 **Rule: do not add data members or logic to platform-specific window classes
 (`Win32Window`, `CocoaWindow`, `X11Window`) if the member is not tied to a
 platform API. Anything shared across platforms belongs in `uc::BaseWindow`.**
 
+**Rule: if behavior is identical across all platforms, move it to `uc::BaseWindow`
+and call it from each platform. When adding or changing any feature, keep all
+three platforms up to date — no platform should lag behind the others.**
+
 Each platform provides a `createWindow()` factory; CMake selects the right one.
+
+## Platform Implementation Notes
+
+### Cocoa (`src/platform/macos/cocoa_window.mm`)
+- `UCContentView : NSView` holds a `CocoaWindow* _owner` back-pointer (non-owning).
+- All layout and hit-testing goes through `_owner->computeLayout()` and `_owner->hitTest()`.
+- Do **not** duplicate ratio state in `UCContentView` — use `_owner->hRatio()` / `setHRatio()`.
+- Tab key is `keyCode == 48`; `mouseDown:` calls `[self.window makeFirstResponder:self]` first.
+
+### X11 (`src/platform/linux/x11_window.cpp`)
+- Avoid naming enum values `None` — conflicts with X11's `#define None 0L`.
+- Use `Hit` alias (`using Hit = uc::BaseWindow::Hit;`) at the top of the file.
+
+### Win32 (`src/platform/windows/win32_window.cpp`)
+- Use `#define NOMINMAX` before `<windows.h>` to prevent `min`/`max` macro conflicts.
+- Use `Hit` alias (`using Hit = uc::BaseWindow::Hit;`) at the top of the file.
 
 ## Panel Types
 
@@ -90,6 +113,15 @@ Three panels split by two draggable dividers (default 50/50):
 Dividers can be dragged; split ratio is preserved on window resize.
 Clicking a panel gives it keyboard focus. Tab switches focus between left/right panels.
 Arrow keys navigate entries; Enter activates (enters directory or goes up via `..`).
+
+### Layout helpers (in `uc::BaseWindow`)
+
+```cpp
+auto [topH, leftW] = computeLayout(W, H);   // pixel positions of dividers
+Hit hit = hitTest(mx, my, W, H);             // what's under the cursor/click
+```
+
+Use these in all platform event handlers — do not recompute geometry inline.
 
 ## Directory Structure
 

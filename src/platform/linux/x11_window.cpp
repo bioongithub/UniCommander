@@ -5,6 +5,9 @@
 #include <X11/cursorfont.h>
 #include <cstring>
 #include <algorithm>
+#include <filesystem>
+
+using Hit = uc::BaseWindow::Hit;
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -89,6 +92,8 @@ bool X11Window::create(const std::string& title, int width, int height)
     m_curEW    = XCreateFontCursor(m_display, XC_sb_h_double_arrow);
     XDefineCursor(m_display, m_window, m_curArrow);
 
+    initPanels(std::filesystem::current_path().string());
+
     return true;
 }
 
@@ -104,10 +109,9 @@ void X11Window::paint()
 {
     GC gc = reinterpret_cast<GC>(m_gc);
 
-    const int W     = m_width;
-    const int H     = m_height;
-    const int topH  = static_cast<int>(H * m_hRatio);
-    const int leftW = static_cast<int>(W * m_vRatio);
+    const int W = m_width;
+    const int H = m_height;
+    auto [topH, leftW] = computeLayout(W, H);
 
     // Fill dividers (whole background first, then panels on top)
     XSetForeground(m_display, gc, m_dividerPx);
@@ -143,9 +147,9 @@ void X11Window::paint()
         XDrawString(m_display, m_window, gc, tx, ty, text, len);
     };
 
-    drawCentered("left",   0,              0,             leftW,                topH);
-    drawCentered("right",  leftW+DIVIDER_W, 0,            W - leftW - DIVIDER_W, topH);
-    drawCentered("bottom", 0,              topH+DIVIDER_W, W,                   H - topH - DIVIDER_W);
+    drawCentered("left",   0,              0,              leftW,                  topH);
+    drawCentered("right",  leftW+DIVIDER_W, 0,             W - leftW - DIVIDER_W, topH);
+    drawCentered("bottom", 0,              topH+DIVIDER_W, W,                     H - topH - DIVIDER_W);
 
     XFlush(m_display);
 }
@@ -179,41 +183,46 @@ void X11Window::run()
             case ButtonPress:
             {
                 if (event.xbutton.button != Button1) break;
-                const int mx    = event.xbutton.x, my = event.xbutton.y;
-                const int topH  = static_cast<int>(m_height * m_hRatio);
-                const int leftW = static_cast<int>(m_width  * m_vRatio);
+                const int mx = event.xbutton.x, my = event.xbutton.y;
+                auto hit = hitTest(mx, my, m_width, m_height);
 
-                if (my >= topH - HIT_ZONE && my <= topH + DIVIDER_W + HIT_ZONE)
+                if (hit == Hit::HorizDivider)
                     m_drag = Drag::Horiz;
-                else if (my < topH &&
-                         mx >= leftW - HIT_ZONE && mx <= leftW + DIVIDER_W + HIT_ZONE)
+                else if (hit == Hit::VertDivider)
                     m_drag = Drag::Vert;
+                else if (hit == Hit::LeftPanel || hit == Hit::RightPanel)
+                {
+                    auto* left  = leftPanel();
+                    auto* right = rightPanel();
+                    if (left && right)
+                    {
+                        left->setFocus(hit == Hit::LeftPanel);
+                        right->setFocus(hit == Hit::RightPanel);
+                        paint();
+                    }
+                }
                 break;
             }
 
             case MotionNotify:
             {
                 const int mx = event.xmotion.x, my = event.xmotion.y;
-                const int topH  = static_cast<int>(m_height * m_hRatio);
-                const int leftW = static_cast<int>(m_width  * m_vRatio);
 
                 if (m_drag == Drag::Horiz && m_height > 0)
                 {
-                    m_hRatio = clamp(static_cast<float>(my) / m_height);
+                    setHRatio(static_cast<float>(my) / m_height);
                     paint();
                 }
                 else if (m_drag == Drag::Vert && m_width > 0)
                 {
-                    m_vRatio = clamp(static_cast<float>(mx) / m_width);
+                    setVRatio(static_cast<float>(mx) / m_width);
                     paint();
                 }
                 else
                 {
-                    // Update cursor based on position
-                    bool nearH = (my >= topH  - HIT_ZONE && my <= topH  + DIVIDER_W + HIT_ZONE);
-                    bool nearV = (my <  topH  &&
-                                  mx >= leftW - HIT_ZONE && mx <= leftW + DIVIDER_W + HIT_ZONE);
-                    unsigned long cur = nearH ? m_curNS : nearV ? m_curEW : m_curArrow;
+                    auto hit = hitTest(mx, my, m_width, m_height);
+                    unsigned long cur = hit == Hit::HorizDivider ? m_curNS :
+                                        hit == Hit::VertDivider  ? m_curEW : m_curArrow;
                     XDefineCursor(m_display, m_window, cur);
                     XFlush(m_display);
                 }
@@ -229,6 +238,11 @@ void X11Window::run()
                 KeySym key = XLookupKeysym(&event.xkey, 0);
                 if (key == XK_q || key == XK_Escape)
                     m_running = false;
+                else if (key == XK_Tab)
+                {
+                    switchFocus();
+                    paint();
+                }
                 break;
             }
 

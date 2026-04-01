@@ -2,6 +2,8 @@
 #include <windowsx.h>
 #include <filesystem>
 
+using Hit = uc::BaseWindow::Hit;
+
 static constexpr const char* CLASS_NAME = "UniCommanderWnd";
 static constexpr int ROW_H    = 18;
 static constexpr int HEADER_H = 20;
@@ -154,10 +156,9 @@ void Win32Window::paint(HDC hdc)
 {
     RECT cr;
     GetClientRect(m_hwnd, &cr);
-    const int W     = cr.right;
-    const int H     = cr.bottom;
-    const int topH  = static_cast<int>(H * m_hRatio);
-    const int leftW = static_cast<int>(W * m_vRatio);
+    const int W        = cr.right;
+    const int H        = cr.bottom;
+    auto [topH, leftW] = computeLayout(W, H);
 
     // ── Panel rects ───────────────────────────────────────────────────────
     RECT leftR   = { 0,               0,              leftW,              topH };
@@ -230,7 +231,7 @@ LRESULT CALLBACK Win32Window::wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
             // Compute visible row count from current geometry
             RECT cr; GetClientRect(hwnd, &cr);
-            const int topH        = static_cast<int>(cr.bottom * self->m_hRatio);
+            const int topH        = self->computeLayout(cr.right, cr.bottom).topH;
             const int visibleRows = std::max(0, (topH - 2 - HEADER_H) / ROW_H);
 
             switch (wp)
@@ -264,29 +265,29 @@ LRESULT CALLBACK Win32Window::wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         {
             if (!self) break;
             RECT cr; GetClientRect(hwnd, &cr);
-            const int W     = cr.right,  H    = cr.bottom;
-            const int topH  = static_cast<int>(H * self->m_hRatio);
-            const int leftW = static_cast<int>(W * self->m_vRatio);
-            const int mx    = GET_X_LPARAM(lp), my = GET_Y_LPARAM(lp);
+            const int mx = GET_X_LPARAM(lp), my = GET_Y_LPARAM(lp);
+            auto hit = self->hitTest(mx, my, cr.right, cr.bottom);
 
-            if (my >= topH - HIT_ZONE && my <= topH + DIVIDER_W + HIT_ZONE)
+            if (hit == Hit::HorizDivider)
             {
                 self->m_drag = Drag::Horiz;
                 SetCapture(hwnd);
             }
-            else if (my < topH &&
-                     mx >= leftW - HIT_ZONE && mx <= leftW + DIVIDER_W + HIT_ZONE)
+            else if (hit == Hit::VertDivider)
             {
                 self->m_drag = Drag::Vert;
                 SetCapture(hwnd);
             }
-            else if (my < topH && self->m_leftPanel && self->m_rightPanel)
+            else if (hit == Hit::LeftPanel || hit == Hit::RightPanel)
             {
-                // Click inside a directory panel — transfer focus
-                bool clickLeft = (mx < leftW);
-                self->m_leftPanel->setFocus(clickLeft);
-                self->m_rightPanel->setFocus(!clickLeft);
-                InvalidateRect(hwnd, nullptr, FALSE);
+                auto* left  = self->leftPanel();
+                auto* right = self->rightPanel();
+                if (left && right)
+                {
+                    left->setFocus(hit == Hit::LeftPanel);
+                    right->setFocus(hit == Hit::RightPanel);
+                    InvalidateRect(hwnd, nullptr, FALSE);
+                }
             }
             return 0;
         }
@@ -300,12 +301,12 @@ LRESULT CALLBACK Win32Window::wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
             if (self->m_drag == Drag::Horiz && H > 0)
             {
-                self->m_hRatio = clamp(static_cast<float>(my) / H);
+                self->setHRatio(static_cast<float>(my) / H);
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
             else if (self->m_drag == Drag::Vert && W > 0)
             {
-                self->m_vRatio = clamp(static_cast<float>(mx) / W);
+                self->setVRatio(static_cast<float>(mx) / W);
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
             return 0;
@@ -322,16 +323,9 @@ LRESULT CALLBACK Win32Window::wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             if (!self || LOWORD(lp) != HTCLIENT) break;
             POINT pt; GetCursorPos(&pt); ScreenToClient(hwnd, &pt);
             RECT cr; GetClientRect(hwnd, &cr);
-            const int W     = cr.right,  H    = cr.bottom;
-            const int topH  = static_cast<int>(H * self->m_hRatio);
-            const int leftW = static_cast<int>(W * self->m_vRatio);
-
-            const bool nearH = (pt.y >= topH  - HIT_ZONE && pt.y <= topH  + DIVIDER_W + HIT_ZONE);
-            const bool nearV = (pt.y <  topH  &&
-                                pt.x >= leftW - HIT_ZONE && pt.x <= leftW + DIVIDER_W + HIT_ZONE);
-
-            SetCursor(LoadCursor(nullptr, nearH ? IDC_SIZENS :
-                                          nearV ? IDC_SIZEWE : IDC_ARROW));
+            auto hit = self->hitTest(pt.x, pt.y, cr.right, cr.bottom);
+            SetCursor(LoadCursor(nullptr, hit == Hit::HorizDivider ? IDC_SIZENS :
+                                          hit == Hit::VertDivider  ? IDC_SIZEWE : IDC_ARROW));
             return TRUE;
         }
 

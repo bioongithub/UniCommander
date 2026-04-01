@@ -14,12 +14,44 @@ public:
     static constexpr int DIVIDER_W = 5;
     static constexpr int HIT_ZONE  = 4;
 
+    // ── Layout ────────────────────────────────────────────────────────────
+
+    struct Layout { int topH; int leftW; };
+
+    Layout computeLayout(int W, int H) const
+    {
+        return { static_cast<int>(H * m_hRatio), static_cast<int>(W * m_vRatio) };
+    }
+
+    // ── Hit testing ───────────────────────────────────────────────────────
+
+    enum class Hit { HorizDivider, VertDivider, LeftPanel, RightPanel, Bottom };
+
+    Hit hitTest(int mx, int my, int W, int H) const
+    {
+        auto [topH, leftW] = computeLayout(W, H);
+        if (my >= topH - HIT_ZONE && my <= topH + DIVIDER_W + HIT_ZONE)
+            return Hit::HorizDivider;
+        if (my < topH && mx >= leftW - HIT_ZONE && mx <= leftW + DIVIDER_W + HIT_ZONE)
+            return Hit::VertDivider;
+        if (my < topH)
+            return mx < leftW ? Hit::LeftPanel : Hit::RightPanel;
+        return Hit::Bottom;
+    }
+
+    // ── Ratios ────────────────────────────────────────────────────────────
+
     float hRatio() const { return m_hRatio; }
     float vRatio() const { return m_vRatio; }
     void  setHRatio(float v) { m_hRatio = clamp(v); }
     void  setVRatio(float v) { m_vRatio = clamp(v); }
 
-    DirectoryPanel* focusedPanel()
+    // ── Panel access ──────────────────────────────────────────────────────
+
+    DirectoryPanel* leftPanel()  const { return m_leftPanel.get(); }
+    DirectoryPanel* rightPanel() const { return m_rightPanel.get(); }
+
+    DirectoryPanel* focusedPanel() const
     {
         if (m_leftPanel  && m_leftPanel->hasFocus())  return m_leftPanel.get();
         if (m_rightPanel && m_rightPanel->hasFocus()) return m_rightPanel.get();

@@ -1,30 +1,32 @@
 #import <Cocoa/Cocoa.h>
 #include "cocoa_window.h"
+#include <filesystem>
 
 static const CGFloat DIVIDER_W = uc::BaseWindow::DIVIDER_W;
 static const CGFloat HIT_ZONE  = uc::BaseWindow::HIT_ZONE;
+
+using Hit = uc::BaseWindow::Hit;
 
 // ── Content view ──────────────────────────────────────────────────────────
 
 @interface UCContentView : NSView
 {
-    CGFloat _hRatio;
-    CGFloat _vRatio;
-    BOOL    _draggingH;
-    BOOL    _draggingV;
+    BOOL         _draggingH;
+    BOOL         _draggingV;
+    CocoaWindow* _owner;    // non-owning; lifetime guaranteed by CocoaWindow
 }
+- (instancetype)initWithFrame:(NSRect)frame owner:(CocoaWindow*)owner;
 @end
 
 @implementation UCContentView
 
-- (instancetype)initWithFrame:(NSRect)frame
+- (instancetype)initWithFrame:(NSRect)frame owner:(CocoaWindow*)owner
 {
     if ((self = [super initWithFrame:frame]))
     {
-        _hRatio    = 0.5;
-        _vRatio    = 0.5;
         _draggingH = NO;
         _draggingV = NO;
+        _owner     = owner;
     }
     return self;
 }
@@ -36,16 +38,15 @@ static const CGFloat HIT_ZONE  = uc::BaseWindow::HIT_ZONE;
 
 - (void)drawRect:(NSRect)__unused dirty
 {
-    CGFloat W     = NSWidth(self.bounds);
-    CGFloat H     = NSHeight(self.bounds);
-    CGFloat topH  = H * _hRatio;
-    CGFloat leftW = W * _vRatio;
+    CGFloat W = NSWidth(self.bounds);
+    CGFloat H = NSHeight(self.bounds);
+    auto [topH, leftW] = _owner->computeLayout(static_cast<int>(W), static_cast<int>(H));
 
-    NSRect leftR   = NSMakeRect(0,              0,      leftW,                 topH);
-    NSRect rightR  = NSMakeRect(leftW+DIVIDER_W, 0,     W - leftW - DIVIDER_W, topH);
-    NSRect bottomR = NSMakeRect(0,              topH+DIVIDER_W, W,             H - topH - DIVIDER_W);
-    NSRect hDivR   = NSMakeRect(0,              topH,   W,                     DIVIDER_W);
-    NSRect vDivR   = NSMakeRect(leftW,          0,      DIVIDER_W,             topH);
+    NSRect leftR   = NSMakeRect(0,              0,               leftW,                 topH);
+    NSRect rightR  = NSMakeRect(leftW+DIVIDER_W, 0,              W - leftW - DIVIDER_W, topH);
+    NSRect bottomR = NSMakeRect(0,              topH+DIVIDER_W,  W,                     H - topH - DIVIDER_W);
+    NSRect hDivR   = NSMakeRect(0,              topH,            W,                     DIVIDER_W);
+    NSRect vDivR   = NSMakeRect(leftW,          0,               DIVIDER_W,             topH);
 
     [[NSColor colorWithWhite:0.31 alpha:1.0] set];
     NSRectFill(hDivR);
@@ -77,28 +78,57 @@ static const CGFloat HIT_ZONE  = uc::BaseWindow::HIT_ZONE;
 
 - (void)resetCursorRects
 {
-    CGFloat W     = NSWidth(self.bounds);
-    CGFloat H     = NSHeight(self.bounds);
-    CGFloat topH  = H * _hRatio;
-    CGFloat leftW = W * _vRatio;
+    CGFloat W = NSWidth(self.bounds);
+    CGFloat H = NSHeight(self.bounds);
+    auto [topH, leftW] = _owner->computeLayout(static_cast<int>(W), static_cast<int>(H));
 
-    [self addCursorRect:NSMakeRect(0,              topH  - HIT_ZONE, W,         DIVIDER_W + HIT_ZONE*2)
+    [self addCursorRect:NSMakeRect(0,               topH - HIT_ZONE,  W,                    DIVIDER_W + HIT_ZONE*2)
                  cursor:[NSCursor resizeUpDownCursor]];
-    [self addCursorRect:NSMakeRect(leftW - HIT_ZONE, 0,              DIVIDER_W + HIT_ZONE*2, topH)
+    [self addCursorRect:NSMakeRect(leftW - HIT_ZONE, 0,               DIVIDER_W + HIT_ZONE*2, topH)
                  cursor:[NSCursor resizeLeftRightCursor]];
+}
+
+// ── Keyboard ──────────────────────────────────────────────────────────────
+
+- (void)keyDown:(NSEvent*)event
+{
+    if (event.keyCode == 48)  // Tab
+    {
+        _owner->switchFocus();
+        [self setNeedsDisplay:YES];
+    }
+    else
+    {
+        [super keyDown:event];
+    }
 }
 
 // ── Mouse ─────────────────────────────────────────────────────────────────
 
 - (void)mouseDown:(NSEvent*)event
 {
-    NSPoint p     = [self convertPoint:event.locationInWindow fromView:nil];
-    CGFloat topH  = NSHeight(self.bounds) * _hRatio;
-    CGFloat leftW = NSWidth(self.bounds)  * _vRatio;
+    [self.window makeFirstResponder:self];
 
-    _draggingH = (p.y >= topH - HIT_ZONE && p.y <= topH + DIVIDER_W + HIT_ZONE);
-    _draggingV = (!_draggingH && p.y < topH &&
-                  p.x >= leftW - HIT_ZONE && p.x <= leftW + DIVIDER_W + HIT_ZONE);
+    NSPoint p  = [self convertPoint:event.locationInWindow fromView:nil];
+    CGFloat W  = NSWidth(self.bounds);
+    CGFloat H  = NSHeight(self.bounds);
+    Hit     hit = _owner->hitTest(static_cast<int>(p.x), static_cast<int>(p.y),
+                                  static_cast<int>(W),   static_cast<int>(H));
+
+    _draggingH = (hit == Hit::HorizDivider);
+    _draggingV = (hit == Hit::VertDivider);
+
+    if (!_draggingH && !_draggingV)
+    {
+        auto* left  = _owner->leftPanel();
+        auto* right = _owner->rightPanel();
+        if (left && right && (hit == Hit::LeftPanel || hit == Hit::RightPanel))
+        {
+            left->setFocus(hit == Hit::LeftPanel);
+            right->setFocus(hit == Hit::RightPanel);
+            [self setNeedsDisplay:YES];
+        }
+    }
 }
 
 - (void)mouseDragged:(NSEvent*)event
@@ -108,13 +138,13 @@ static const CGFloat HIT_ZONE  = uc::BaseWindow::HIT_ZONE;
 
     if (_draggingH && H > 0)
     {
-        _hRatio = static_cast<CGFloat>(std::clamp(static_cast<float>(p.y / H), 0.1f, 0.9f));
+        _owner->setHRatio(static_cast<float>(p.y / H));
         [self setNeedsDisplay:YES];
         [self.window invalidateCursorRectsForView:self];
     }
     else if (_draggingV && W > 0)
     {
-        _vRatio = static_cast<CGFloat>(std::clamp(static_cast<float>(p.x / W), 0.1f, 0.9f));
+        _owner->setVRatio(static_cast<float>(p.x / W));
         [self setNeedsDisplay:YES];
         [self.window invalidateCursorRectsForView:self];
     }
@@ -163,12 +193,16 @@ bool CocoaWindow::create(const std::string& title, int width, int height)
                                            styleMask:style
                                              backing:NSBackingStoreBuffered
                                                defer:NO];
+    if (!m_window) return false;
 
-    UCContentView* view = [[UCContentView alloc] initWithFrame:frame];
+    initPanels(std::filesystem::current_path().string());
+
+    UCContentView* view = [[UCContentView alloc] initWithFrame:frame owner:this];
     [m_window setContentView:view];
     [m_window setTitle:[NSString stringWithUTF8String:title.c_str()]];
+    [m_window makeFirstResponder:view];
     [m_window center];
-    return m_window != nullptr;
+    return true;
 }
 
 void CocoaWindow::show()
