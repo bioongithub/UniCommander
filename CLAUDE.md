@@ -206,90 +206,144 @@ Foundation required before user-visible features can be built reliably.
 
 ### UI Test Harness — Detailed Plan
 
-Goal: drive the app via synthetic events and assert on panel state, headless, same test
-code on all three platforms. No OS message injection — events go through `BaseWindow`
-methods so tests bypass the platform event loop entirely.
+#### Architecture: stdin/stdout protocol
 
-#### Step 1 — `Key` enum in `BaseWindow`
-Add a platform-agnostic key enum to `base_window.h`:
+The app runs in headless `--test` mode (no window, no display required).
+An external Python script drives it as a subprocess via stdin/stdout pipes.
+This keeps all test code outside the app and works identically on all 3 platforms.
+
 ```
-enum class Key { Up, Down, Return, Tab, Escape, F1..F10, Q };
+Python script                    unicommander --test
+─────────────────                ───────────────────
+send: "keydown down\n"    →      handleKeyDown(Key::Down)
+send: "keydown down\n"    →      handleKeyDown(Key::Down)
+send: "state\n"           →      print state snapshot
+receive: "selected=2 ..." ←
+assert state["selected"] == 2
 ```
 
-#### Step 2 — Window size in `BaseWindow`
-Add `m_width`, `m_height` to `BaseWindow` with a `setSize(int w, int h)` method.
+Python test example:
+```python
+app = TestDriver("unicommander")   # wraps subprocess
+app.keydown("down")
+app.keydown("down")
+state = app.state()
+assert state["selected"] == 2
+assert state["focus"] == "left"
+
+for _ in range(3):
+    app.keydown("down")
+state = app.state()
+assert state["selected"] == 5
+```
+
+#### State snapshot format (one line, key=value pairs)
+```
+focus=left leftSelected=2 rightSelected=0 leftPath=/home/user rightPath=/home/user hRatio=0.5 vRatio=0.5
+```
+
+#### Command set (stdin, one command per line)
+```
+keydown <key>          # keys: up down return tab escape q f1..f10
+click <x> <y>          # mouse button down + up at coords
+mousedown <x> <y>
+mousemove <x> <y>
+mouseup <x> <y>
+size <w> <h>           # resize the test window
+state                  # request state snapshot → written to stdout
+quit                   # exit the test runner
+```
+
+#### App-side steps
+
+**Step 1 — `Key` enum in `BaseWindow`**
+Add to `base_window.h`:
+```cpp
+enum class Key { Up, Down, Return, Tab, Escape, Q, F1, F2, F3, F4, F5,
+                 F6, F7, F8, F9, F10 };
+```
+
+**Step 2 — Window size in `BaseWindow`**
+Add `m_width`, `m_height` to `BaseWindow` with `setSize(int w, int h)`.
 Platforms call `setSize()` on create and on every resize event.
-The handle* methods below use these stored dimensions instead of querying the OS.
+Handle* methods use these stored dimensions instead of querying the OS.
 
-#### Step 3 — Virtual `invalidate()` in `BaseWindow`
+**Step 3 — Virtual `invalidate()` in `BaseWindow`**
 ```cpp
 virtual void invalidate() = 0;
 ```
-Platform implementations:
 - Win32: `InvalidateRect(m_hwnd, nullptr, FALSE)`
 - Cocoa: `[contentView setNeedsDisplay:YES]`
 - X11: `paint()`
 - TestWindow: no-op
 
-#### Step 4 — Event handling methods in `BaseWindow`
-Move all event logic out of platform files into `BaseWindow`:
+**Step 4 — Event handling methods in `BaseWindow`**
+Move all event logic out of platform files:
 ```cpp
-void handleKeyDown(Key key);       // navigation, focus, quit
-void handleMouseDown(int x, int y); // focus change, drag start
-void handleMouseMove(int x, int y); // drag update
-void handleMouseUp  (int x, int y); // drag end
+void handleKeyDown  (Key key);
+void handleMouseDown(int x, int y);
+void handleMouseMove(int x, int y);
+void handleMouseUp  (int x, int y);
 ```
 Platform-specific concerns that stay in platform code:
-- Win32: `SetCapture` / `ReleaseCapture` around drag (called after `handleMouseDown` / `handleMouseUp`)
-- Cocoa: `makeFirstResponder` on mouse down (called before `handleMouseDown`)
-- X11: cursor shape changes in `MotionNotify` (called after `handleMouseMove`)
-- All rendering (`paint`, `drawRect`, `WM_PAINT`) stays in platform code
+- Win32: `SetCapture` / `ReleaseCapture` around drag
+- Cocoa: `makeFirstResponder` before `handleMouseDown`
+- X11: cursor shape update after `handleMouseMove`
+- All rendering stays in platform code
 
-#### Step 5 — Refactor Win32
-Translate Win32 messages to `BaseWindow` calls:
+**Step 5 — Refactor Win32**
 - `WM_SIZE`        → `setSize(LOWORD(lp), HIWORD(lp))`
 - `WM_KEYDOWN`     → translate `wp` → `Key`, call `handleKeyDown(key)`
-- `WM_LBUTTONDOWN` → `handleMouseDown(mx, my)`, then `SetCapture` if drag started
+- `WM_LBUTTONDOWN` → `handleMouseDown(mx, my)`, then `SetCapture` if dragging
 - `WM_MOUSEMOVE`   → `handleMouseMove(mx, my)`
 - `WM_LBUTTONUP`   → `handleMouseUp(mx, my)`, then `ReleaseCapture`
 
-#### Step 6 — Refactor Cocoa
+**Step 6 — Refactor Cocoa**
 - `setFrameSize:` / `viewDidEndLiveResize` → `setSize(w, h)`
-- `keyDown:`       → translate `keyCode` → `Key`, call `handleKeyDown(key)`
-- `mouseDown:`     → `makeFirstResponder`, then `handleMouseDown(x, y)`
-- `mouseDragged:`  → `handleMouseMove(x, y)`
-- `mouseUp:`       → `handleMouseUp(x, y)`
+- `keyDown:`      → translate `keyCode` → `Key`, call `handleKeyDown(key)`
+- `mouseDown:`    → `makeFirstResponder`, then `handleMouseDown(x, y)`
+- `mouseDragged:` → `handleMouseMove(x, y)`
+- `mouseUp:`      → `handleMouseUp(x, y)`
 
-#### Step 7 — Refactor X11
-- `ConfigureNotify` → `setSize(w, h)` (already stores m_width/m_height, move to BaseWindow)
+**Step 7 — Refactor X11**
+- `ConfigureNotify` → `setSize(w, h)`
 - `KeyPress`        → translate keysym → `Key`, call `handleKeyDown(key)`
 - `ButtonPress`     → `handleMouseDown(x, y)`
 - `MotionNotify`    → `handleMouseMove(x, y)`, then update cursor (platform-only)
 - `ButtonRelease`   → `handleMouseUp(x, y)`
 
-#### Step 8 — `TestWindow` class
+**Step 8 — `TestWindow` class**
 Add `tests/test_window.h`:
 - Inherits `BaseWindow`
-- Stub `create()` calls `initPanels(tempPath)` and `setSize(800, 600)`, no OS calls
-- Stub `show()`, `run()`, `close()` — all no-ops
-- `invalidate()` — no-op (or increments a repaint counter for assertions)
-- Instantiable without a display on any platform
+- `create()` calls `initPanels(tempPath)` and `setSize(800, 600)`, no OS calls
+- `show()`, `run()`, `close()` — all no-ops
+- `invalidate()` — no-op
+- `stateSnapshot()` — returns the state string for stdout
 
-#### Step 9 — CMake test target
-Add `tests/CMakeLists.txt`:
-- Separate executable `unicommander_tests`
-- Links `src/ui/directory_panel.cpp` and the new `tests/test_window.h`
-- No platform window sources needed
-- Initially a simple `main()` with `assert()`; Catch2 added later as a drop-in
+**Step 9 — `--test` mode in `main.cpp`**
+```cpp
+if (argc > 1 && std::string(argv[1]) == "--test") {
+    TestWindow win;
+    win.create("", 800, 600);
+    runTestLoop(win);   // reads stdin, dispatches commands, writes state
+    return 0;
+}
+```
+`runTestLoop` is ~50 lines in `src/test_runner.cpp` (not compiled in normal builds).
 
-#### Step 10 — Initial test cases
-Cover the most critical behaviors first:
-- Keyboard navigation: Up/Down moves selection, clamps at bounds
-- Enter: activates directory, path changes; activates `..`, goes to parent
-- Tab: switches focus between left and right panel
-- Mouse click on left panel: left gets focus, right loses it; and vice versa
-- Mouse click on divider: drag state set correctly
-- Hit testing: verify `hitTest()` returns correct `Hit` for known coordinates
+**Step 10 — Python `TestDriver` helper**
+Add `tests/driver.py`:
+- Wraps `subprocess.Popen`
+- Methods: `keydown(key)`, `click(x, y)`, `size(w, h)`, `state()` → dict, `quit()`
+- `state()` sends `"state\n"` and parses the response line into a dict
+
+**Step 11 — Initial Python test scripts**
+Add `tests/test_navigation.py`, `tests/test_focus.py`, etc.:
+- Navigation: Up/Down moves selection, clamps at bounds
+- Enter: activates directory, path changes; `..` goes to parent
+- Tab: switches focus between panels
+- Click: panel focus follows mouse
+- Hit testing: click on known divider coords, check drag state via hRatio change
 
 ### Phase 3 — Core file manager features
 Classic commander functionality.
