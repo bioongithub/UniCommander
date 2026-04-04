@@ -32,6 +32,7 @@ build\Debug\unicommander.exe  # Windows (MSVC)
 - Constants/macros: `UPPER_SNAKE_CASE`
 - Prefer `#pragma once` over include guards
 - No raw owning pointers — use smart pointers (`std::unique_ptr`, `std::shared_ptr`)
+- ASCII only in all source files — no Unicode box-drawing, arrows, or other non-ASCII characters in comments, strings, or identifiers. Use `// --- Section ---` for section headers.
 
 ## UI Class Hierarchy
 

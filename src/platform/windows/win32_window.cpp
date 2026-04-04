@@ -8,8 +8,7 @@ static constexpr const char* CLASS_NAME = "UniCommanderWnd";
 static constexpr int ROW_H    = 18;
 static constexpr int HEADER_H = 20;
 
-// ── Lifecycle ─────────────────────────────────────────────────────────────────
-
+// --- Lifecycle ---
 Win32Window::Win32Window()
     : m_hinstance(GetModuleHandle(nullptr))
 {}
@@ -75,8 +74,7 @@ void Win32Window::close()
         PostMessage(m_hwnd, WM_CLOSE, 0, 0);
 }
 
-// ── Rendering ─────────────────────────────────────────────────────────────────
-
+// --- Rendering ---
 void Win32Window::renderDirectoryPanel(HDC hdc, RECT rect, uc::DirectoryPanel& panel)
 {
     const int panelH = rect.bottom - rect.top;
@@ -160,24 +158,24 @@ void Win32Window::paint(HDC hdc)
     const int H        = cr.bottom;
     auto [topH, leftW] = computeLayout(W, H);
 
-    // ── Panel rects ───────────────────────────────────────────────────────
+    // --- Panel rects ---
     RECT leftR   = { 0,               0,              leftW,              topH };
     RECT rightR  = { leftW+DIVIDER_W, 0,              W,                  topH };
     RECT bottomR = { 0,               topH+DIVIDER_W, W,                  H    };
     RECT hDivR   = { 0,               topH,           W,                  topH+DIVIDER_W };
     RECT vDivR   = { leftW,           0,              leftW+DIVIDER_W,    topH };
 
-    // ── Dividers ──────────────────────────────────────────────────────────
+    // --- Dividers ---
     HBRUSH divBrush = CreateSolidBrush(RGB(80, 80, 80));
     FillRect(hdc, &hDivR, divBrush);
     FillRect(hdc, &vDivR, divBrush);
     DeleteObject(divBrush);
 
-    // ── Directory panels ──────────────────────────────────────────────────
+    // --- Directory panels ---
     if (m_leftPanel)  renderDirectoryPanel(hdc, leftR,  *m_leftPanel);
     if (m_rightPanel) renderDirectoryPanel(hdc, rightR, *m_rightPanel);
 
-    // ── Bottom panel (terminal placeholder) ───────────────────────────────
+    // --- Bottom panel (terminal placeholder) ---
     HBRUSH panelBrush = CreateSolidBrush(RGB(30, 30, 30));
     FillRect(hdc, &bottomR, panelBrush);
     DeleteObject(panelBrush);
@@ -186,8 +184,7 @@ void Win32Window::paint(HDC hdc)
     DrawText(hdc, "Terminal", -1, &bottomR, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
 
-// ── Window procedure ──────────────────────────────────────────────────────────
-
+// --- Window procedure ---
 LRESULT CALLBACK Win32Window::wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     Win32Window* self = nullptr;
@@ -206,7 +203,7 @@ LRESULT CALLBACK Win32Window::wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
     switch (msg)
     {
-        // ── Drawing ───────────────────────────────────────────────────────
+        // --- Drawing ---
         case WM_PAINT:
         {
             PAINTSTRUCT ps;
@@ -219,48 +216,28 @@ LRESULT CALLBACK Win32Window::wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             return 1;
 
         case WM_SIZE:
+            if (self) self->setSize(LOWORD(lp), HIWORD(lp));
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
 
-        // ── Keyboard ──────────────────────────────────────────────────────
+        // --- Keyboard ---
         case WM_KEYDOWN:
         {
             if (!self) break;
-            auto* panel = self->focusedPanel();
-            if (!panel) break;
-
-            // Compute visible row count from current geometry
-            RECT cr; GetClientRect(hwnd, &cr);
-            const int topH        = self->computeLayout(cr.right, cr.bottom).topH;
-            const int visibleRows = std::max(0, (topH - 2 - HEADER_H) / ROW_H);
-
+            using Key = uc::BaseWindow::Key;
             switch (wp)
             {
-                case VK_UP:
-                    panel->moveUp();
-                    panel->ensureVisible(visibleRows);
-                    InvalidateRect(hwnd, nullptr, FALSE);
-                    return 0;
-                case VK_DOWN:
-                    panel->moveDown();
-                    panel->ensureVisible(visibleRows);
-                    InvalidateRect(hwnd, nullptr, FALSE);
-                    return 0;
-                case VK_RETURN:
-                    panel->activate();
-                    InvalidateRect(hwnd, nullptr, FALSE);
-                    return 0;
-                case VK_TAB:
-                    self->switchFocus();
-                    InvalidateRect(hwnd, nullptr, FALSE);
-                    return 0;
-                default:
-                    break;
+                case VK_UP:     self->handleKeyDown(Key::Up);     return 0;
+                case VK_DOWN:   self->handleKeyDown(Key::Down);   return 0;
+                case VK_RETURN: self->handleKeyDown(Key::Return); return 0;
+                case VK_TAB:    self->handleKeyDown(Key::Tab);    return 0;
+                case VK_ESCAPE: self->handleKeyDown(Key::Escape); return 0;
+                default: break;
             }
             break;
         }
 
-        // ── Splitter drag ─────────────────────────────────────────────────
+        // --- Splitter drag ---
         case WM_LBUTTONDOWN:
         {
             if (!self) break;
@@ -317,7 +294,7 @@ LRESULT CALLBACK Win32Window::wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             ReleaseCapture();
             return 0;
 
-        // ── Cursor ────────────────────────────────────────────────────────
+        // --- Cursor ---
         case WM_SETCURSOR:
         {
             if (!self || LOWORD(lp) != HTCLIENT) break;
@@ -329,7 +306,7 @@ LRESULT CALLBACK Win32Window::wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             return TRUE;
         }
 
-        // ── Lifecycle ─────────────────────────────────────────────────────
+        // --- Lifecycle ---
         case WM_CLOSE:
             DestroyWindow(hwnd);
             return 0;

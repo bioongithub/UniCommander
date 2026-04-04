@@ -52,7 +52,7 @@ The driver waits for this line before sending any commands.
 Sent in response to the `state` command:
 
 ```
-focus=left leftSelected=2 rightSelected=0 leftPath=/home/user rightPath=/home/user hRatio=0.5 vRatio=0.5
+focus=left leftSelected=2 rightSelected=0 leftPath=/home/user rightPath=/home/user leftEntries=..,src/,include/,README.md rightEntries=..,src/,include/,README.md hRatio=0.5 vRatio=0.5
 ```
 
 Fields are space-separated `key=value` pairs. All fields are always present.
@@ -64,6 +64,8 @@ Fields are space-separated `key=value` pairs. All fields are always present.
 | `rightSelected` | int | Zero-based selection index in the right panel |
 | `leftPath` | string | Absolute path shown in the left panel |
 | `rightPath` | string | Absolute path shown in the right panel |
+| `leftEntries` | string | Comma-separated entry names; directories have a trailing `/` |
+| `rightEntries` | string | Comma-separated entry names; directories have a trailing `/` |
 | `hRatio` | float | Horizontal split ratio (0.0–1.0) |
 | `vRatio` | float | Vertical split ratio (0.0–1.0) |
 
@@ -77,15 +79,40 @@ error unknown: <original line>
 
 ---
 
-## TestDriver API (`driver.py`)
+## Python API (`driver.py`)
+
+### `TestDriver` — low-level protocol wrapper
 
 ```python
 from driver import TestDriver
 
 app = TestDriver("path/to/unicommander")  # spawns process, waits for "ready"
 app.send("keydown down")                  # raw command
-state = app.state()                       # returns dict of current state
+state = app.state()                       # sends "state", returns dict[str, str]
 app.quit()                                # sends "quit", waits for process exit
 ```
 
-`state()` sends `state\n` and parses the response into a `dict[str, str]`.
+### `TestCase` — base class for test suites
+
+Subclass `TestCase`, add `test_*` methods, call `run()`. Tests run in
+alphabetical order; `run()` calls `app.quit()` at the end and returns
+`True` if all tests passed.
+
+```python
+from driver import TestCase
+import sys
+
+class NavigationTests(TestCase):
+    def test_initial_focus(self):
+        s = self.app.state()
+        assert s["focus"] == "left", f"expected left, got {s['focus']}"
+
+    def test_move_down(self):
+        self.app.send("keydown down")
+        s = self.app.state()
+        assert s["leftSelected"] == "1", f"expected 1, got {s['leftSelected']}"
+
+if __name__ == "__main__":
+    ok = NavigationTests(sys.argv[1]).run()
+    sys.exit(0 if ok else 1)
+```

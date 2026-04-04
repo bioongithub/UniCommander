@@ -12,23 +12,36 @@ This includes:
 
 No protocol change is complete until `README.md` is updated.
 
+## Test isolation
+
+Each test method runs against a fresh app process. The framework starts the app
+before each test and quits it after, regardless of pass or fail. Tests must not
+assume any state left by a previous test. Do not add teardown logic to tests to
+restore state -- the fresh process handles it automatically.
+
 ## Test file conventions
 
 - One test script per feature area: `test_navigation.py`, `test_focus.py`, etc.
-- Each script is standalone and runnable directly:
+- Each script subclasses `TestCase` and is standalone and runnable directly:
   ```bash
   python tests/test_navigation.py build/Debug/unicommander.exe
   ```
-- Use `TestDriver` from `driver.py` — do not spawn subprocesses directly.
-- Always call `app.quit()` at the end of a test (use `try/finally`).
+- `TestCase` owns the driver and calls `app.quit()` automatically in `run()`.
 - Assert with plain `assert` and a descriptive message:
   ```python
-  state = app.state()
-  assert state["focus"] == "left", f"expected focus=left, got {state['focus']}"
+  s = self.app.state()
+  assert s["focus"] == "left", f"expected left, got {s['focus']}"
+  ```
+- Exit with the return value of `run()` so CI can detect failures:
+  ```python
+  if __name__ == "__main__":
+      ok = MyTests(sys.argv[1]).run()
+      sys.exit(0 if ok else 1)
   ```
 
 ## driver.py
 
 `driver.py` is the sole interface between test scripts and the app.
+It provides two classes: `TestDriver` (protocol layer) and `TestCase` (test runner base).
 If the protocol changes, update `driver.py` and `README.md` together.
 Do not duplicate protocol logic across individual test scripts.

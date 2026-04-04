@@ -9,8 +9,7 @@
 
 using Hit = uc::BaseWindow::Hit;
 
-// ── Helpers ───────────────────────────────────────────────────────────────
-
+// --- Helpers ---
 static unsigned long allocRGB(Display* dpy, int r, int g, int b)
 {
     XColor c = {};
@@ -22,8 +21,7 @@ static unsigned long allocRGB(Display* dpy, int r, int g, int b)
     return c.pixel;
 }
 
-// ── Lifecycle ─────────────────────────────────────────────────────────────
-
+// --- Lifecycle ---
 X11Window::X11Window()  = default;
 
 X11Window::~X11Window()
@@ -70,10 +68,10 @@ bool X11Window::create(const std::string& title, int width, int height)
                  ButtonPressMask  | ButtonReleaseMask  |
                  PointerMotionMask | StructureNotifyMask);
 
-    // ── GC ────────────────────────────────────────────────────────────────
+    // --- GC ---
     m_gc = reinterpret_cast<_XGC*>(XCreateGC(m_display, m_window, 0, nullptr));
 
-    // ── Font ──────────────────────────────────────────────────────────────
+    // --- Font ---
     XFontStruct* fs = XLoadQueryFont(m_display, "-*-fixed-medium-r-*-*-14-*-*-*-*-*-*-*");
     if (!fs)
         fs = XLoadQueryFont(m_display, "fixed");
@@ -81,12 +79,12 @@ bool X11Window::create(const std::string& title, int width, int height)
     if (fs)
         XSetFont(m_display, reinterpret_cast<GC>(m_gc), fs->fid);
 
-    // ── Colors ────────────────────────────────────────────────────────────
+    // --- Colors ---
     m_panelPx   = allocRGB(m_display,  30,  30,  30);
     m_dividerPx = allocRGB(m_display,  80,  80,  80);
     m_textPx    = allocRGB(m_display, 220, 220, 220);
 
-    // ── Cursors ───────────────────────────────────────────────────────────
+    // --- Cursors ---
     m_curArrow = XCreateFontCursor(m_display, XC_left_ptr);
     m_curNS    = XCreateFontCursor(m_display, XC_sb_v_double_arrow);
     m_curEW    = XCreateFontCursor(m_display, XC_sb_h_double_arrow);
@@ -103,8 +101,7 @@ void X11Window::show()
         XMapWindow(m_display, m_window);
 }
 
-// ── Painting ──────────────────────────────────────────────────────────────
-
+// --- Painting ---
 void X11Window::paint()
 {
     GC gc = reinterpret_cast<GC>(m_gc);
@@ -154,8 +151,7 @@ void X11Window::paint()
     XFlush(m_display);
 }
 
-// ── Event loop ────────────────────────────────────────────────────────────
-
+// --- Event loop ---
 void X11Window::run()
 {
     if (!m_display) return;

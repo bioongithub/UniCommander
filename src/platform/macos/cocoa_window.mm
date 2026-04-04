@@ -7,8 +7,7 @@ static const CGFloat HIT_ZONE  = uc::BaseWindow::HIT_ZONE;
 
 using Hit = uc::BaseWindow::Hit;
 
-// ── Content view ──────────────────────────────────────────────────────────
-
+// --- Content view ---
 @interface UCContentView : NSView
 {
     BOOL         _draggingH;
@@ -34,8 +33,7 @@ using Hit = uc::BaseWindow::Hit;
 - (BOOL)isFlipped { return YES; }  // Y increases downward (matches Win32/X11)
 - (BOOL)acceptsFirstResponder { return YES; }
 
-// ── Drawing ───────────────────────────────────────────────────────────────
-
+// --- Drawing ---
 - (void)drawRect:(NSRect)__unused dirty
 {
     CGFloat W = NSWidth(self.bounds);
@@ -74,8 +72,7 @@ using Hit = uc::BaseWindow::Hit;
     drawCentered(@"bottom", bottomR);
 }
 
-// ── Cursor rects ──────────────────────────────────────────────────────────
-
+// --- Cursor rects ---
 - (void)resetCursorRects
 {
     CGFloat W = NSWidth(self.bounds);
@@ -88,8 +85,7 @@ using Hit = uc::BaseWindow::Hit;
                  cursor:[NSCursor resizeLeftRightCursor]];
 }
 
-// ── Keyboard ──────────────────────────────────────────────────────────────
-
+// --- Keyboard ---
 - (void)keyDown:(NSEvent*)event
 {
     if (event.keyCode == 48)  // Tab
@@ -103,8 +99,7 @@ using Hit = uc::BaseWindow::Hit;
     }
 }
 
-// ── Mouse ─────────────────────────────────────────────────────────────────
-
+// --- Mouse ---
 - (void)mouseDown:(NSEvent*)event
 {
     [self.window makeFirstResponder:self];
@@ -158,8 +153,7 @@ using Hit = uc::BaseWindow::Hit;
 
 @end
 
-// ── AppDelegate ───────────────────────────────────────────────────────────
-
+// --- AppDelegate ---
 @interface AppDelegate : NSObject <NSApplicationDelegate>
 @end
 
@@ -170,8 +164,7 @@ using Hit = uc::BaseWindow::Hit;
 }
 @end
 
-// ── CocoaWindow ───────────────────────────────────────────────────────────
-
+// --- CocoaWindow ---
 CocoaWindow::CocoaWindow()  = default;
 CocoaWindow::~CocoaWindow() = default;
 
