@@ -85,17 +85,26 @@ using Hit = uc::BaseWindow::Hit;
                  cursor:[NSCursor resizeLeftRightCursor]];
 }
 
+// --- Resize ---
+- (void)setFrameSize:(NSSize)newSize
+{
+    [super setFrameSize:newSize];
+    _owner->setSize(static_cast<int>(newSize.width), static_cast<int>(newSize.height));
+}
+
 // --- Keyboard ---
 - (void)keyDown:(NSEvent*)event
 {
-    if (event.keyCode == 48)  // Tab
+    using Key = uc::BaseWindow::Key;
+    switch (event.keyCode)
     {
-        _owner->switchFocus();
-        [self setNeedsDisplay:YES];
-    }
-    else
-    {
-        [super keyDown:event];
+        case 126: _owner->handleKeyDown(Key::Up);     break;  // arrow up
+        case 125: _owner->handleKeyDown(Key::Down);   break;  // arrow down
+        case 36:  _owner->handleKeyDown(Key::Return); break;  // return
+        case 48:  _owner->handleKeyDown(Key::Tab);    break;  // tab
+        case 53:  _owner->handleKeyDown(Key::Escape); break;  // escape
+        case 12:  _owner->handleKeyDown(Key::Q);      break;  // q
+        default:  [super keyDown:event]; break;
     }
 }
 
@@ -214,6 +223,12 @@ void CocoaWindow::close()
 {
     if (m_window)
         [m_window close];
+}
+
+void CocoaWindow::invalidate()
+{
+    if (m_window)
+        [m_window.contentView setNeedsDisplay:YES];
 }
 
 std::unique_ptr<uc::Window> createWindow()

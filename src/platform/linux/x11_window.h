@@ -14,9 +14,10 @@ public:
     ~X11Window() override;
 
     bool create(const std::string& title, int width, int height) override;
-    void show()  override;
-    void run()   override;
-    void close() override;
+    void show()       override;
+    void run()        override;
+    void close()      override;
+    void invalidate() override;
 
 private:
     void paint();
@@ -26,9 +27,6 @@ private:
     _XGC*         m_gc       { nullptr }; // X11 GC      = _XGC*
     _XFontStruct* m_fontInfo { nullptr };
     bool          m_running  { false };
-
-    int m_width  { 800 };
-    int m_height { 600 };
 
     // Pixel values for drawing (allocated at create time)
     unsigned long m_panelPx   { 0 };

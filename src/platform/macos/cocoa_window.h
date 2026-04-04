@@ -16,9 +16,10 @@ public:
     ~CocoaWindow() override;
 
     bool create(const std::string& title, int width, int height) override;
-    void show()  override;
-    void run()   override;
-    void close() override;
+    void show()      override;
+    void run()       override;
+    void close()     override;
+    void invalidate() override;
 
 private:
     NSWindow*    m_window   { nullptr };

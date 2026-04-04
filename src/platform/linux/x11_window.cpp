@@ -43,8 +43,7 @@ bool X11Window::create(const std::string& title, int width, int height)
     m_display = XOpenDisplay(nullptr);
     if (!m_display) return false;
 
-    m_width  = width;
-    m_height = height;
+    setSize(width, height);
 
     int screen = DefaultScreen(m_display);
 
@@ -171,8 +170,7 @@ void X11Window::run()
                 break;
 
             case ConfigureNotify:
-                m_width  = event.xconfigure.width;
-                m_height = event.xconfigure.height;
+                setSize(event.xconfigure.width, event.xconfigure.height);
                 paint();
                 break;
 
@@ -231,13 +229,17 @@ void X11Window::run()
 
             case KeyPress:
             {
-                KeySym key = XLookupKeysym(&event.xkey, 0);
-                if (key == XK_q || key == XK_Escape)
-                    m_running = false;
-                else if (key == XK_Tab)
+                using Key = uc::BaseWindow::Key;
+                KeySym ks = XLookupKeysym(&event.xkey, 0);
+                switch (ks)
                 {
-                    switchFocus();
-                    paint();
+                    case XK_Up:       handleKeyDown(Key::Up);     break;
+                    case XK_Down:     handleKeyDown(Key::Down);   break;
+                    case XK_Return:   handleKeyDown(Key::Return); break;
+                    case XK_Tab:      handleKeyDown(Key::Tab);    break;
+                    case XK_Escape:   handleKeyDown(Key::Escape); m_running = false; break;
+                    case XK_q:        handleKeyDown(Key::Q);      m_running = false; break;
+                    default: break;
                 }
                 break;
             }
@@ -251,6 +253,11 @@ void X11Window::run()
                 break;
         }
     }
+}
+
+void X11Window::invalidate()
+{
+    paint();
 }
 
 void X11Window::close()
