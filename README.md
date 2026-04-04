@@ -25,6 +25,11 @@ cmake --build build
 build\Debug\unicommander.exe
 ```
 
+## Testing
+
+The test suite drives the app as a subprocess via a stdin/stdout text protocol.
+See [tests/README.md](tests/README.md) for the protocol reference and how to run tests.
+
 ## License
 
 MIT

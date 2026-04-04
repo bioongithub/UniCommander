@@ -376,6 +376,14 @@ Classic commander functionality.
 
 No feature is complete until all three are done.
 
+## Test Protocol Rule
+
+**Any change to the stdin/stdout test protocol must be reflected in `tests/README.md`.**
+
+This includes new commands, removed commands, changed state snapshot fields,
+changed key names, or changes to the handshake. See `tests/CLAUDE.md` for
+the full rule set governing the test directory.
+
 ## Testing
 
 Unit tests go in `tests/`. Use a C++ testing framework (e.g., Google Test or Catch2).
