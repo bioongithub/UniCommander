@@ -262,7 +262,19 @@ void X11Window::invalidate()
 
 void X11Window::close()
 {
-    m_running = false;
+    if (!m_display || !m_window) { m_running = false; return; }
+    // Post WM_DELETE_WINDOW to ourselves to unblock XNextEvent
+    Atom wm_protocols = XInternAtom(m_display, "WM_PROTOCOLS",    False);
+    Atom wm_delete    = XInternAtom(m_display, "WM_DELETE_WINDOW", False);
+    XClientMessageEvent ev = {};
+    ev.type         = ClientMessage;
+    ev.window       = m_window;
+    ev.message_type = wm_protocols;
+    ev.format       = 32;
+    ev.data.l[0]    = static_cast<long>(wm_delete);
+    XSendEvent(m_display, m_window, False, NoEventMask,
+               reinterpret_cast<XEvent*>(&ev));
+    XFlush(m_display);
 }
 
 std::unique_ptr<uc::Window> createWindow()
