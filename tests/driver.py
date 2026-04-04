@@ -112,10 +112,14 @@ class TestCase:
 def _run_all(executable):
     from test_initial_state import InitialStateTests
     from test_focus import FocusTests
+    from test_navigation import NavigationTests
+    from test_activation import ActivationTests
 
     suites = [
         InitialStateTests,
         FocusTests,
+        NavigationTests,
+        ActivationTests,
     ]
 
     total_passed = total_failed = 0
