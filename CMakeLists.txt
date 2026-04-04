@@ -8,6 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(SOURCES
     src/main.cpp
     src/ui/directory_panel.cpp
+    src/test_runner.cpp
 )
 
 # ── Platform-specific sources and libraries ─────────────────────────────────
