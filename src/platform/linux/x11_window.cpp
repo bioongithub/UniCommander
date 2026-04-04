@@ -9,6 +9,9 @@
 
 using Hit = uc::BaseWindow::Hit;
 
+static constexpr int ROW_H    = 18;
+static constexpr int HEADER_H = 20;
+
 // --- Helpers ---
 static unsigned long allocRGB(Display* dpy, int r, int g, int b)
 {
@@ -79,9 +82,19 @@ bool X11Window::create(const std::string& title, int width, int height)
         XSetFont(m_display, reinterpret_cast<GC>(m_gc), fs->fid);
 
     // --- Colors ---
-    m_panelPx   = allocRGB(m_display,  30,  30,  30);
-    m_dividerPx = allocRGB(m_display,  80,  80,  80);
-    m_textPx    = allocRGB(m_display, 220, 220, 220);
+    m_dividerPx    = allocRGB(m_display,  80,  80,  80);
+    m_panelBgPx    = allocRGB(m_display,  20,  20,  20);
+    m_headerBgPx   = allocRGB(m_display,  40,  40,  60);
+    m_headerTextPx = allocRGB(m_display, 180, 180, 255);
+    m_borderFocPx  = allocRGB(m_display,   0, 120, 215);
+    m_borderUnfPx  = allocRGB(m_display,  80,  80,  80);
+    m_selFocPx     = allocRGB(m_display,   0,  80, 160);
+    m_selUnfPx     = allocRGB(m_display,  55,  55,  55);
+    m_dirTextPx    = allocRGB(m_display, 100, 180, 255);
+    m_fileTextPx   = allocRGB(m_display, 220, 220, 220);
+    m_selTextPx    = allocRGB(m_display, 255, 255, 255);
+    m_bottomBgPx   = allocRGB(m_display,  30,  30,  30);
+    m_bottomTextPx = allocRGB(m_display, 220, 220, 220);
 
     // --- Cursors ---
     m_curArrow = XCreateFontCursor(m_display, XC_left_ptr);
@@ -101,51 +114,113 @@ void X11Window::show()
 }
 
 // --- Painting ---
+void X11Window::renderDirectoryPanel(int rx, int ry, int rw, int rh,
+                                     uc::DirectoryPanel& panel)
+{
+    GC gc = reinterpret_cast<GC>(m_gc);
+    auto* fs = reinterpret_cast<XFontStruct*>(m_fontInfo);
+    const int fontAscent  = fs ? fs->ascent  : 11;
+    const int fontDescent = fs ? fs->descent :  2;
+
+    const int visibleRows = std::max(0, (rh - HEADER_H - 2) / ROW_H);
+    panel.ensureVisible(visibleRows);
+
+    // Background
+    XSetForeground(m_display, gc, m_panelBgPx);
+    XFillRectangle(m_display, m_window, gc,
+                   rx, ry, static_cast<unsigned>(rw), static_cast<unsigned>(rh));
+
+    // Border
+    XSetForeground(m_display, gc, panel.hasFocus() ? m_borderFocPx : m_borderUnfPx);
+    XDrawRectangle(m_display, m_window, gc,
+                   rx, ry, static_cast<unsigned>(rw - 1), static_cast<unsigned>(rh - 1));
+
+    // Header background
+    XSetForeground(m_display, gc, m_headerBgPx);
+    XFillRectangle(m_display, m_window, gc,
+                   rx + 1, ry + 1, static_cast<unsigned>(rw - 2), HEADER_H);
+
+    // Header path text
+    XSetForeground(m_display, gc, m_headerTextPx);
+    std::string path = panel.getPath();
+    int headerTextY  = ry + 1 + (HEADER_H + fontAscent) / 2 - fontDescent;
+    XDrawString(m_display, m_window, gc,
+                rx + 4, headerTextY, path.c_str(), static_cast<int>(path.size()));
+
+    // Entry rows
+    const auto& entries    = panel.entries();
+    const int   scrollOff  = panel.scrollOffset();
+    const int   selectedIdx = panel.selectedIndex();
+    int y = ry + 1 + HEADER_H;
+
+    for (int i = scrollOff;
+         i < static_cast<int>(entries.size()) && y + ROW_H <= ry + rh - 1;
+         ++i, y += ROW_H)
+    {
+        bool selected = (i == selectedIdx);
+
+        if (selected)
+        {
+            XSetForeground(m_display, gc,
+                           panel.hasFocus() ? m_selFocPx : m_selUnfPx);
+            XFillRectangle(m_display, m_window, gc,
+                           rx + 1, y, static_cast<unsigned>(rw - 2), ROW_H);
+        }
+
+        const auto& entry = entries[i];
+        if (selected)
+            XSetForeground(m_display, gc, m_selTextPx);
+        else if (entry.isDir)
+            XSetForeground(m_display, gc, m_dirTextPx);
+        else
+            XSetForeground(m_display, gc, m_fileTextPx);
+
+        std::string label = (entry.isDir && entry.name != "..")
+            ? "[" + entry.name + "]" : entry.name;
+        int entryTextY = y + (ROW_H + fontAscent) / 2 - fontDescent;
+        XDrawString(m_display, m_window, gc,
+                    rx + 4, entryTextY,
+                    label.c_str(), static_cast<int>(label.size()));
+    }
+}
+
 void X11Window::paint()
 {
     GC gc = reinterpret_cast<GC>(m_gc);
+    auto* fs = reinterpret_cast<XFontStruct*>(m_fontInfo);
 
     const int W = m_width;
     const int H = m_height;
     auto [topH, leftW] = computeLayout(W, H);
 
-    // Fill dividers (whole background first, then panels on top)
+    // Divider background (fills the gaps between panels)
     XSetForeground(m_display, gc, m_dividerPx);
-    XFillRectangle(m_display, m_window, gc, 0, 0,
-                   static_cast<unsigned>(W), static_cast<unsigned>(H));
+    XFillRectangle(m_display, m_window, gc,
+                   0, 0, static_cast<unsigned>(W), static_cast<unsigned>(H));
 
-    // Fill panels
-    XSetForeground(m_display, gc, m_panelPx);
-    XFillRectangle(m_display, m_window, gc,
-                   0, 0,
-                   static_cast<unsigned>(leftW),
-                   static_cast<unsigned>(topH));                    // left
-    XFillRectangle(m_display, m_window, gc,
-                   leftW + DIVIDER_W, 0,
-                   static_cast<unsigned>(W - leftW - DIVIDER_W),
-                   static_cast<unsigned>(topH));                    // right
+    // Directory panels
+    if (m_leftPanel)
+        renderDirectoryPanel(0, 0, leftW, topH, *m_leftPanel);
+    if (m_rightPanel)
+        renderDirectoryPanel(leftW + DIVIDER_W, 0,
+                             W - leftW - DIVIDER_W, topH, *m_rightPanel);
+
+    // Bottom panel
+    XSetForeground(m_display, gc, m_bottomBgPx);
     XFillRectangle(m_display, m_window, gc,
                    0, topH + DIVIDER_W,
                    static_cast<unsigned>(W),
-                   static_cast<unsigned>(H - topH - DIVIDER_W));    // bottom
+                   static_cast<unsigned>(H - topH - DIVIDER_W));
 
-    // Draw labels (centered)
-    XSetForeground(m_display, gc, m_textPx);
-    auto* fs = reinterpret_cast<XFontStruct*>(m_fontInfo);
-
-    auto drawCentered = [&](const char* text, int rx, int ry, int rw, int rh)
-    {
-        int len = static_cast<int>(strlen(text));
-        int tw  = fs ? XTextWidth(fs, text, len) : len * 7;
-        int th  = fs ? (fs->ascent + fs->descent) : 13;
-        int tx  = rx + (rw - tw) / 2;
-        int ty  = ry + (rh + th) / 2 - (fs ? fs->descent : 2);
-        XDrawString(m_display, m_window, gc, tx, ty, text, len);
-    };
-
-    drawCentered("left",   0,              0,              leftW,                  topH);
-    drawCentered("right",  leftW+DIVIDER_W, 0,             W - leftW - DIVIDER_W, topH);
-    drawCentered("bottom", 0,              topH+DIVIDER_W, W,                     H - topH - DIVIDER_W);
+    const char* bottomLabel = "Terminal";
+    int len = static_cast<int>(strlen(bottomLabel));
+    int tw  = fs ? XTextWidth(fs, bottomLabel, len) : len * 7;
+    int th  = fs ? (fs->ascent + fs->descent) : 13;
+    int tx  = (W - tw) / 2;
+    int ty  = topH + DIVIDER_W + (H - topH - DIVIDER_W + th) / 2
+              - (fs ? fs->descent : 2);
+    XSetForeground(m_display, gc, m_bottomTextPx);
+    XDrawString(m_display, m_window, gc, tx, ty, bottomLabel, len);
 
     XFlush(m_display);
 }

@@ -21,6 +21,8 @@ public:
 
 private:
     void paint();
+    void renderDirectoryPanel(int rx, int ry, int rw, int rh,
+                              uc::DirectoryPanel& panel);
 
     _XDisplay*    m_display  { nullptr };
     unsigned long m_window   { 0 };       // X11 Window  = unsigned long
@@ -29,9 +31,19 @@ private:
     bool          m_running  { false };
 
     // Pixel values for drawing (allocated at create time)
-    unsigned long m_panelPx   { 0 };
-    unsigned long m_dividerPx { 0 };
-    unsigned long m_textPx    { 0 };
+    unsigned long m_dividerPx    { 0 };
+    unsigned long m_panelBgPx    { 0 };
+    unsigned long m_headerBgPx   { 0 };
+    unsigned long m_headerTextPx { 0 };
+    unsigned long m_borderFocPx  { 0 };
+    unsigned long m_borderUnfPx  { 0 };
+    unsigned long m_selFocPx     { 0 };
+    unsigned long m_selUnfPx     { 0 };
+    unsigned long m_dirTextPx    { 0 };
+    unsigned long m_fileTextPx   { 0 };
+    unsigned long m_selTextPx    { 0 };
+    unsigned long m_bottomBgPx   { 0 };
+    unsigned long m_bottomTextPx { 0 };
 
     // Cursors (X11 Cursor = unsigned long)
     unsigned long m_curArrow { 0 };

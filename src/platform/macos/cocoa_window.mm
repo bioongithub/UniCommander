@@ -4,6 +4,8 @@
 
 static const CGFloat DIVIDER_W = uc::BaseWindow::DIVIDER_W;
 static const CGFloat HIT_ZONE  = uc::BaseWindow::HIT_ZONE;
+static const int     ROW_H     = 18;
+static const int     HEADER_H  = 20;
 
 using Hit = uc::BaseWindow::Hit;
 
@@ -34,42 +36,120 @@ using Hit = uc::BaseWindow::Hit;
 - (BOOL)acceptsFirstResponder { return YES; }
 
 // --- Drawing ---
+- (void)renderDirectoryPanel:(NSRect)r panel:(uc::DirectoryPanel&)panel
+{
+    NSFont* font      = [NSFont userFixedPitchFontOfSize:12.0];
+    CGFloat fontH     = font.ascender - font.descender;
+    CGFloat baselineOff = (ROW_H - fontH) / 2.0 + font.descender;
+
+    int visibleRows = std::max(0, (int)(NSHeight(r) - HEADER_H - 2) / ROW_H);
+    panel.ensureVisible(visibleRows);
+
+    // Background
+    [[NSColor colorWithRed:0.08 green:0.08 blue:0.08 alpha:1.0] set];
+    NSRectFill(r);
+
+    // Border
+    NSColor* borderColor = panel.hasFocus()
+        ? [NSColor colorWithRed:0.0  green:0.47 blue:0.84 alpha:1.0]
+        : [NSColor colorWithWhite:0.31 alpha:1.0];
+    [borderColor set];
+    NSFrameRect(r);
+
+    // Header background
+    NSRect headerR = NSMakeRect(r.origin.x + 1, r.origin.y + 1,
+                                r.size.width - 2, HEADER_H);
+    [[NSColor colorWithRed:0.16 green:0.16 blue:0.24 alpha:1.0] set];
+    NSRectFill(headerR);
+
+    // Header path text
+    NSString* path = [NSString stringWithUTF8String:panel.getPath().c_str()];
+    NSDictionary* headerAttrs = @{
+        NSForegroundColorAttributeName: [NSColor colorWithRed:0.71 green:0.71 blue:1.0 alpha:1.0],
+        NSFontAttributeName: font
+    };
+    CGFloat headerTextY = r.origin.y + 1 + (HEADER_H - fontH) / 2.0 - font.descender;
+    [path drawAtPoint:NSMakePoint(r.origin.x + 4, headerTextY) withAttributes:headerAttrs];
+
+    // Entry rows
+    const auto& entries    = panel.entries();
+    int         scrollOff  = panel.scrollOffset();
+    int         selectedIdx = panel.selectedIndex();
+    CGFloat y = r.origin.y + 1 + HEADER_H;
+
+    for (int i = scrollOff;
+         i < (int)entries.size() && y + ROW_H <= r.origin.y + r.size.height - 1;
+         ++i, y += ROW_H)
+    {
+        bool selected = (i == selectedIdx);
+        NSRect rowR = NSMakeRect(r.origin.x + 1, y, r.size.width - 2, ROW_H);
+
+        if (selected)
+        {
+            NSColor* selColor = panel.hasFocus()
+                ? [NSColor colorWithRed:0.0 green:0.31 blue:0.63 alpha:1.0]
+                : [NSColor colorWithWhite:0.22 alpha:1.0];
+            [selColor set];
+            NSRectFill(rowR);
+        }
+
+        const auto& entry = entries[i];
+        NSColor* textColor;
+        if (selected)
+            textColor = [NSColor whiteColor];
+        else if (entry.isDir)
+            textColor = [NSColor colorWithRed:0.39 green:0.71 blue:1.0 alpha:1.0];
+        else
+            textColor = [NSColor colorWithWhite:0.86 alpha:1.0];
+
+        std::string labelStr = (entry.isDir && entry.name != "..")
+            ? "[" + entry.name + "]" : entry.name;
+        NSString* label = [NSString stringWithUTF8String:labelStr.c_str()];
+        NSDictionary* rowAttrs = @{
+            NSForegroundColorAttributeName: textColor,
+            NSFontAttributeName: font
+        };
+        [label drawAtPoint:NSMakePoint(r.origin.x + 4, y + baselineOff)
+            withAttributes:rowAttrs];
+    }
+}
+
 - (void)drawRect:(NSRect)__unused dirty
 {
     CGFloat W = NSWidth(self.bounds);
     CGFloat H = NSHeight(self.bounds);
     auto [topH, leftW] = _owner->computeLayout(static_cast<int>(W), static_cast<int>(H));
 
-    NSRect leftR   = NSMakeRect(0,              0,               leftW,                 topH);
-    NSRect rightR  = NSMakeRect(leftW+DIVIDER_W, 0,              W - leftW - DIVIDER_W, topH);
-    NSRect bottomR = NSMakeRect(0,              topH+DIVIDER_W,  W,                     H - topH - DIVIDER_W);
-    NSRect hDivR   = NSMakeRect(0,              topH,            W,                     DIVIDER_W);
-    NSRect vDivR   = NSMakeRect(leftW,          0,               DIVIDER_W,             topH);
+    NSRect hDivR   = NSMakeRect(0,              topH,           W,        DIVIDER_W);
+    NSRect vDivR   = NSMakeRect(leftW,          0,              DIVIDER_W, topH);
+    NSRect bottomR = NSMakeRect(0,              topH+DIVIDER_W, W,        H - topH - DIVIDER_W);
 
+    // Dividers
     [[NSColor colorWithWhite:0.31 alpha:1.0] set];
     NSRectFill(hDivR);
     NSRectFill(vDivR);
 
+    // Directory panels
+    NSRect leftR  = NSMakeRect(0,              0, leftW,                 topH);
+    NSRect rightR = NSMakeRect(leftW+DIVIDER_W, 0, W - leftW - DIVIDER_W, topH);
+    if (_owner->leftPanel())
+        [self renderDirectoryPanel:leftR  panel:*_owner->leftPanel()];
+    if (_owner->rightPanel())
+        [self renderDirectoryPanel:rightR panel:*_owner->rightPanel()];
+
+    // Bottom panel
     [[NSColor colorWithWhite:0.12 alpha:1.0] set];
-    NSRectFill(leftR);
-    NSRectFill(rightR);
     NSRectFill(bottomR);
 
     NSDictionary* attrs = @{
         NSForegroundColorAttributeName: [NSColor colorWithWhite:0.86 alpha:1.0],
         NSFontAttributeName:            [NSFont systemFontOfSize:13.0]
     };
-
-    auto drawCentered = [&](NSString* text, NSRect rect) {
-        NSSize sz = [text sizeWithAttributes:attrs];
-        NSPoint p = NSMakePoint(NSMidX(rect) - sz.width  / 2.0,
-                                NSMidY(rect) - sz.height / 2.0);
-        [text drawAtPoint:p withAttributes:attrs];
-    };
-
-    drawCentered(@"left",   leftR);
-    drawCentered(@"right",  rightR);
-    drawCentered(@"bottom", bottomR);
+    NSString* label = @"Terminal";
+    NSSize sz = [label sizeWithAttributes:attrs];
+    [label drawAtPoint:NSMakePoint(NSMidX(bottomR) - sz.width  / 2.0,
+                                   NSMidY(bottomR) - sz.height / 2.0)
+        withAttributes:attrs];
 }
 
 // --- Cursor rects ---
