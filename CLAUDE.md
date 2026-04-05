@@ -8,7 +8,7 @@ Language: C/C++.
 
 ## Architecture Goals
 
-- Dual-pane file manager in the style of classic commanders (Norton Commander, Midnight Commander)
+- Dual-pane file manager modeled after Far Manager, with extensions
 - Native UI per platform: Win32 (Windows), Cocoa (macOS), Xlib/X11 (Linux)
 - Cross-platform abstraction layer for filesystem operations
 
@@ -247,27 +247,55 @@ Not yet implemented: `click`, `mousedown`, `mousemove`, `mouseup`, `size`.
 - `tests/utils.py` — `entries_for(path)` filesystem helper
 - `tests/test_initial_state.py`, `test_focus.py`, `test_navigation.py`, `test_activation.py`, `test_right_panel.py`
 
-### Phase 3 — Core file manager features
-Classic commander functionality.
+### Phase 3 — Far Manager baseline
 
-- [ ] Function key bar rendered at the bottom of the window (F1–F10 labels)
-- [ ] F5 Copy — copy selected file/dir to the opposite panel's directory
-- [ ] F6 Move / Rename — move or rename selected file/dir
-- [ ] F7 Make directory — prompt for name, create in current panel's directory
-- [ ] F8 Delete — confirm-prompt then delete selected file/dir
-- [ ] F10 Quit — close the application
+Implement the standard Far Manager command set. F-key bar is always visible at
+the bottom. Esc = cancel (never quit).
 
-### Phase 4 — Usability improvements
+#### F-key bar + quit
+- [ ] F-key bar rendered at bottom (F1–F10 labels, always visible)
+- [ ] F10 — Quit (and Cmd+Q on macOS, Alt+F4 on Windows)
 
-- [ ] F3 File viewer — read-only text viewer for selected file
-- [ ] Search / filter — type to filter entries in the active panel
-- [ ] Multi-selection (Ins key or Space to mark entries)
-- [ ] Status bar — show entry count, selected count, free disk space
+#### Navigation
+- [ ] Ctrl+\\ — Go to root of current panel's drive
+- [ ] Ctrl+R — Refresh / reload current panel
+- [ ] Ctrl+U — Swap left and right panels
+- [ ] Alt+F1 / Alt+F2 — Change drive / root for left / right panel
+- [ ] Space — Select entry and show directory size (for dirs)
+- [ ] Ins — Mark / unmark file (multi-select toggle)
+- [ ] `+` / `-` — Select / deselect by wildcard pattern
+- [ ] `*` — Invert selection
 
-### Phase 5 — Terminal panel
+#### File operations
+- [ ] F5 — Copy selected file(s)/dir(s) to opposite panel's directory
+- [ ] F6 — Move / Rename selected file(s)/dir(s)
+- [ ] F7 — Make directory (prompt for name)
+- [ ] F8 — Delete selected file(s)/dir(s) with confirmation prompt
 
-- [ ] Implement `TerminalPanel` — embedded terminal in the bottom panel
-- [ ] Hook shell working directory to the focused directory panel's path
+#### Viewers and editors
+- [ ] F3 — View file (read-only text viewer, scrollable)
+- [ ] F4 — Edit file (launch external editor, configurable)
+
+#### Search
+- [ ] Alt+F7 — Find file (name pattern + optional content search)
+
+#### Menus and help
+- [ ] F9 — Activate menu bar (Files / Commands / Options)
+- [ ] F1 — In-app help overlay (keyboard shortcut reference)
+- [ ] F2 — User menu (configurable shortcut list, stored in config file)
+
+#### Status bar
+- [ ] Status bar below panels: entry count, selected count, free disk space
+
+### Phase 4 — Extensions
+
+UniCommander-specific additions beyond the Far Manager baseline. Specific
+features TBD as the project evolves.
+
+- [ ] Terminal panel — embedded shell in the bottom pane, cwd follows active panel
+- [ ] Quick filter — type to filter entries in active panel (incremental search)
+- [ ] Configurable color themes
+- [ ] Column view option (name / size / date / attributes)
 
 ## Feature Development Rule
 
