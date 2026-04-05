@@ -76,6 +76,16 @@ public:
     virtual void invalidate() = 0;   // platform: schedule a repaint
     void handleKeyDown(Key key);
 
+    // --- State reset (for --test mode) ---
+    void resetState(const std::string& dir)
+    {
+        m_hRatio = 0.5f;
+        m_vRatio = 0.5f;
+        m_drag   = Drag::Idle;
+        initPanels(dir);
+        invalidate();
+    }
+
     // --- State snapshot (for --test mode) ---
     std::string stateSnapshot() const override;
 

@@ -19,9 +19,10 @@ from utils import entries_for
 class TestDriver:
     """Low-level stdin/stdout protocol driver. Wraps the app subprocess."""
 
-    def __init__(self, executable):
+    def __init__(self, executable, initial_dir):
+        self._initial_dir = initial_dir
         self.proc = subprocess.Popen(
-            [os.path.abspath(executable), "--test"],
+            [os.path.abspath(executable), "--test", initial_dir],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             text=True,
@@ -35,6 +36,9 @@ class TestDriver:
     def send(self, command):
         self.proc.stdin.write(command + "\n")
         self.proc.stdin.flush()
+
+    def reset(self):
+        self.send(f"reset {self._initial_dir}")
 
     def state(self):
         self.send("state")
@@ -52,8 +56,9 @@ class TestCase:
     """
     Base class for test suites. Subclass and add test_* methods.
 
-    Each TestCase instance owns its own app process. Tests run in
-    alphabetical order; run() quits the app and returns True if all passed.
+    run(app) takes a TestDriver owned by the caller. Before each test the
+    driver sends 'reset' to restore initial state. Tests run in alphabetical
+    order; run() returns True if all passed.
 
     Example:
         class MyTests(TestCase):
@@ -81,15 +86,16 @@ class TestCase:
                 f"{key}: expected {value!r}, got {actual.get(key)!r}"
             )
 
-    def run(self):
+    def run(self, app):
         tests = sorted(
             name for name in dir(self)
             if name.startswith("test_") and callable(getattr(self, name))
         )
         suite = type(self).__name__
         print(f"\n[{suite}] {len(tests)} test(s)")
+        self.app = app
         for name in tests:
-            self.app = TestDriver(self._executable)
+            self.app.reset()
             try:
                 getattr(self, name)()
                 print(f"  PASS  {name}")
@@ -100,10 +106,7 @@ class TestCase:
             except Exception as e:
                 print(f"  ERROR {name}: {type(e).__name__}: {e}")
                 self._failed += 1
-            finally:
-                self.app.quit()
-                self.app = None
-
+        self.app = None
         return self._failed == 0
 
 
@@ -122,12 +125,16 @@ def _run_all(executable):
         ActivationTests,
     ]
 
+    app = TestDriver(executable, _TESTS_DIR)
     total_passed = total_failed = 0
-    for cls in suites:
-        instance = cls(executable)
-        instance.run()
-        total_passed += instance._passed
-        total_failed += instance._failed
+    try:
+        for cls in suites:
+            instance = cls(executable)
+            instance.run(app)
+            total_passed += instance._passed
+            total_failed += instance._failed
+    finally:
+        app.quit()
 
     print(f"\n{'='*40}")
     print(f"Total: {total_passed} passed, {total_failed} failed")

@@ -14,10 +14,12 @@ No protocol change is complete until `README.md` is updated.
 
 ## Test isolation
 
-Each test method runs against a fresh app process. The framework starts the app
-before each test and quits it after, regardless of pass or fail. Tests must not
-assume any state left by a previous test. Do not add teardown logic to tests to
-restore state -- the fresh process handles it automatically.
+All test suites share one app process owned by `_run_all`. `TestDriver` owns the
+process (creates it, quits it). `TestCase.run(app)` takes the driver as an
+argument -- it never creates or destroys it. Before each test method the driver
+sends `reset <dir>` to restore the initial panel state (both panels pointing to
+the tests directory, left focus, selection at 0, default ratios). Tests must not
+assume any state left by a previous test.
 
 ## Test file conventions
 

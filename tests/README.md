@@ -34,6 +34,7 @@ The driver waits for this line before sending any commands.
 | Command | Description |
 |---|---|
 | `keydown <key>` | Simulate a key press |
+| `reset <dir>` | Reinitialise both panels to `<dir>`, restore default state |
 | `click <x> <y>` | Mouse button down + up at pixel coords |
 | `mousedown <x> <y>` | Mouse button down |
 | `mousemove <x> <y>` | Mouse move (drag) |
@@ -86,10 +87,11 @@ error unknown: <original line>
 ```python
 from driver import TestDriver
 
-app = TestDriver("path/to/unicommander")  # spawns process, waits for "ready"
-app.send("keydown down")                  # raw command
-state = app.state()                       # sends "state", returns dict[str, str]
-app.quit()                                # sends "quit", waits for process exit
+app = TestDriver("path/to/unicommander", "/initial/dir")  # spawns process, waits for "ready"
+app.send("keydown down")                                  # raw command
+app.reset()                                               # sends "reset <initial_dir>"
+state = app.state()                                       # sends "state", returns dict[str, str]
+app.quit()                                                # sends "quit", waits for process exit
 ```
 
 ### `TestCase` — base class for test suites

@@ -46,6 +46,14 @@ static void testLoop(std::weak_ptr<uc::Window> winWeak)
             continue;
         }
 
+        if (line.substr(0, 6) == "reset ")
+        {
+            std::string dir = line.substr(6);
+            auto* base = dynamic_cast<uc::BaseWindow*>(win.get());
+            if (base) base->resetState(dir);
+            continue;
+        }
+
         if (line.substr(0, 8) == "keydown ")
         {
             std::string keyName = line.substr(8);

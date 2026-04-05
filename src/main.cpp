@@ -1,11 +1,35 @@
 #include "ui/window.h"
 #include "test_runner.h"
+#include <filesystem>
+#include <iostream>
 #include <memory>
 #include <string>
 
 int main(int argc, char* argv[])
 {
-    const bool testMode = argc > 1 && std::string(argv[1]) == "--test";
+    bool testMode = false;
+    std::string initialDir;
+
+    for (int i = 1; i < argc; ++i)
+    {
+        std::string arg = argv[i];
+        if (arg == "--test")
+            testMode = true;
+        else if (initialDir.empty())
+            initialDir = arg;
+    }
+
+    if (!initialDir.empty())
+    {
+        std::error_code ec;
+        std::filesystem::current_path(initialDir, ec);
+        if (ec)
+        {
+            std::cerr << "error: cannot set directory '" << initialDir
+                      << "': " << ec.message() << "\n";
+            return 1;
+        }
+    }
 
     // shared_ptr so a weak_ptr can be handed to the test thread.
     std::shared_ptr<uc::Window> window(createWindow().release());
