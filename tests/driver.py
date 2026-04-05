@@ -57,6 +57,8 @@ class TestDriver:
     def quit(self):
         self.send("quit")
         self.proc.wait(timeout=5)
+        if self.proc.returncode != 0:
+            raise RuntimeError(f"App exited with code {self.proc.returncode}")
 
 
 # --- Test base class ---

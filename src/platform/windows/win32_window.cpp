@@ -69,7 +69,6 @@ void Win32Window::run()
 
 void Win32Window::close()
 {
-    m_running = false;
     if (m_hwnd)
         PostMessage(m_hwnd, WM_CLOSE, 0, 0);
 }
@@ -312,7 +311,7 @@ LRESULT CALLBACK Win32Window::wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             return 0;
 
         case WM_DESTROY:
-            if (self) self->m_running = false;
+            if (self) { self->m_hwnd = nullptr; self->m_running = false; }
             PostQuitMessage(0);
             return 0;
 
