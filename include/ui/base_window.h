@@ -82,7 +82,8 @@ public:
         m_hRatio = 0.5f;
         m_vRatio = 0.5f;
         m_drag   = Drag::Idle;
-        initPanels(dir);
+        if (m_leftPanel)  m_leftPanel->resetPanel(dir, true);
+        if (m_rightPanel) m_rightPanel->resetPanel(dir, false);
         invalidate();
     }
 

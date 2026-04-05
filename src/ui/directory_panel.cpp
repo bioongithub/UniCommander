@@ -22,6 +22,12 @@ void DirectoryPanel::setPath(const std::string& path)
     refresh();
 }
 
+void DirectoryPanel::resetPanel(const std::string& path, bool focused)
+{
+    setPath(path);
+    m_hasFocus = focused;
+}
+
 std::string DirectoryPanel::getPath() const
 {
     return m_path.string();

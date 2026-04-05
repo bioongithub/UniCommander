@@ -21,6 +21,7 @@ public:
     void      setFocus(bool focused) override { m_hasFocus = focused; }
 
     void        setPath(const std::string& path);
+    void        resetPanel(const std::string& path, bool focused);
     std::string getPath() const;
     void        refresh();
 

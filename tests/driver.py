@@ -128,12 +128,14 @@ def _run_all(executable):
     from test_focus import FocusTests
     from test_navigation import NavigationTests
     from test_activation import ActivationTests
+    from test_right_panel import RightPanelTests
 
     suites = [
         InitialStateTests,
         FocusTests,
         NavigationTests,
         ActivationTests,
+        RightPanelTests,
     ]
 
     app = TestDriver(executable, _TESTS_DIR)
