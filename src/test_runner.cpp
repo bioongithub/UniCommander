@@ -58,6 +58,19 @@ static void testLoop(std::weak_ptr<uc::Window> winWeak)
             continue;
         }
 
+        if (line.substr(0, 7) == "dialog ")
+        {
+            std::string answer = line.substr(7);
+            auto* base = dynamic_cast<uc::BaseWindow*>(win.get());
+            if (base)
+            {
+                if (answer == "yes")       base->setDialogAnswer(true);
+                else if (answer == "no")   base->setDialogAnswer(false);
+                else std::cout << "error unknown dialog answer: " << answer << "\n";
+            }
+            continue;
+        }
+
         if (line.substr(0, 8) == "keydown ")
         {
             std::string keyName = line.substr(8);
@@ -69,7 +82,17 @@ static void testLoop(std::weak_ptr<uc::Window> winWeak)
             else
             {
                 auto* base = dynamic_cast<uc::BaseWindow*>(win.get());
-                if (base) base->handleKeyDown(it->second);
+                if (base)
+                {
+                    // scheduleKeyDown() delivers the key on the platform's
+                    // main thread (serialised with rendering) to prevent data
+                    // races on panel state.  On Win32 it uses SendMessage so
+                    // this call blocks until the key is fully processed.
+                    base->scheduleKeyDown(it->second);
+                    // If this key triggered a quit, exit now so the test
+                    // thread does not block on std::cin while the CRT shuts down.
+                    if (base->isClosing()) return;
+                }
             }
             continue;
         }
@@ -82,8 +105,7 @@ static void testLoop(std::weak_ptr<uc::Window> winWeak)
         win->close();
 }
 
-void startTestThread(std::weak_ptr<uc::Window> win)
+std::thread startTestThread(std::weak_ptr<uc::Window> win)
 {
-    std::thread t(testLoop, std::move(win));
-    t.detach();
+    return std::thread(testLoop, std::move(win));
 }

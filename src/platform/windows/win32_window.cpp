@@ -59,9 +59,14 @@ void Win32Window::show()
 void Win32Window::run()
 {
     m_running = true;
-    MSG msg   = {};
-    while (m_running && GetMessage(&msg, nullptr, 0, 0))
+    MSG  msg = {};
+    BOOL r;
+    // GetMessage returns 0 for WM_QUIT, -1 on error, positive for all others.
+    // The naive pattern "while (GetMessage(...))" treats -1 as truthy and then
+    // calls DispatchMessage with garbage -- fix by testing != 0 explicitly.
+    while (m_running && (r = GetMessage(&msg, nullptr, 0, 0)) != 0)
     {
+        if (r == -1) break;    // GetMessage error; bail out cleanly
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
@@ -70,7 +75,40 @@ void Win32Window::run()
 void Win32Window::close()
 {
     if (m_hwnd)
-        PostMessage(m_hwnd, WM_CLOSE, 0, 0);
+    {
+        m_closing = true;
+        // SendMessage (not PostMessage) so WM_CLOSE is processed synchronously.
+        // By the time close() returns, WM_DESTROY has run and PostQuitMessage(0)
+        // has been called, giving the process a clean exit code.
+        SendMessage(m_hwnd, WM_CLOSE, 0, 0);
+    }
+}
+
+void Win32Window::scheduleKeyDown(Key key)
+{
+    // Deliver the key on the main (UI) thread so that handleKeyDown() is
+    // serialised with WM_PAINT.  This prevents data races between the test
+    // thread (which calls scheduleKeyDown) and the render thread that reads
+    // the same DirectoryPanel state (entries, selection, scroll offset).
+    //
+    // WM_APP+1 is in the application-defined range (0x8000-0xBFFF).
+    if (m_hwnd)
+        SendMessage(m_hwnd, WM_APP + 1, static_cast<WPARAM>(key), 0);
+}
+
+bool Win32Window::confirmQuit()
+{
+    if (m_testDialogAnswer.has_value())
+    {
+        bool ans = *m_testDialogAnswer;
+        m_testDialogAnswer.reset();
+        return ans;
+    }
+    int r = MessageBoxA(m_hwnd,
+                        "Are you sure you want to quit?",
+                        "UniCommander",
+                        MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
+    return r == IDYES;
 }
 
 // --- Rendering ---
@@ -219,7 +257,25 @@ LRESULT CALLBACK Win32Window::wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
 
+        // --- Test harness key dispatch ---
+        // The test thread calls scheduleKeyDown() which uses SendMessage to
+        // deliver WM_APP+1 here, ensuring handleKeyDown() runs on the main
+        // thread and is serialised with WM_PAINT (no panel data race).
+        case WM_APP + 1:
+            if (self) self->handleKeyDown(static_cast<Key>(wp));
+            return 0;
+
         // --- Keyboard ---
+        // Note: VK_F10 arrives as WM_SYSKEYDOWN on Win32 (it activates the
+        // system menu bar), so it must be handled in both messages.
+        case WM_SYSKEYDOWN:
+        {
+            if (!self) break;
+            using Key = uc::BaseWindow::Key;
+            if (wp == VK_F10) { self->handleKeyDown(Key::F10); return 0; }
+            break;
+        }
+
         case WM_KEYDOWN:
         {
             if (!self) break;
@@ -307,7 +363,8 @@ LRESULT CALLBACK Win32Window::wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
         // --- Lifecycle ---
         case WM_CLOSE:
-            DestroyWindow(hwnd);
+            if (self && (self->m_closing || self->confirmQuit()))
+                DestroyWindow(hwnd);
             return 0;
 
         case WM_DESTROY:

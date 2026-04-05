@@ -11,10 +11,12 @@ public:
     ~Win32Window() override;
 
     bool create(const std::string& title, int width, int height) override;
-    void show()      override;
-    void run()       override;
-    void close()     override;
-    void invalidate() override { InvalidateRect(m_hwnd, nullptr, FALSE); }
+    void show()              override;
+    void run()               override;
+    void close()             override;
+    void invalidate()        override { InvalidateRect(m_hwnd, nullptr, FALSE); }
+    bool confirmQuit()       override;
+    void scheduleKeyDown(Key key) override;
 
 private:
     static LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);

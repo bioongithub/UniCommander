@@ -2,7 +2,9 @@
 #include "ui/window.h"
 #include "ui/directory_panel.h"
 #include <algorithm>
+#include <atomic>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace uc {
@@ -73,8 +75,25 @@ public:
     }
 
     // --- Event handling ---
-    virtual void invalidate() = 0;   // platform: schedule a repaint
+    virtual void invalidate()   = 0;  // platform: schedule a repaint
+    virtual bool confirmQuit()  = 0;  // platform: show confirmation dialog, true = quit
     void handleKeyDown(Key key);
+
+    // Dispatch a key event so that handleKeyDown() runs on the platform's main
+    // thread.  This eliminates data races between the test thread and the render
+    // thread that accesses the same panel state.
+    //
+    // Default implementation calls handleKeyDown() directly (safe for X11 and
+    // Cocoa where there is no separate render thread).  Win32 overrides this to
+    // use SendMessage so the call is serialised with WM_PAINT.
+    virtual void scheduleKeyDown(Key key) { handleKeyDown(key); }
+
+    bool isClosing() const { return m_closing; }
+
+    // --- Test mode dialog pre-arming ---
+    // Call setDialogAnswer() before the action that triggers confirmQuit().
+    // confirmQuit() will consume the answer and return immediately (no dialog shown).
+    void setDialogAnswer(bool answer) { m_testDialogAnswer = answer; }
 
     // --- State reset (for --test mode) ---
     void resetState(const std::string& dir)
@@ -93,8 +112,13 @@ public:
 protected:
     enum class Drag { Idle, Horiz, Vert };  // 'None' clashes with X11's #define None 0L
 
-    int   m_width  { 800 };
-    int   m_height { 600 };
+    int   m_width   { 800 };
+    int   m_height  { 600 };
+    // Written by test thread (close()), read by main thread (WM_CLOSE handler)
+    // and test thread (isClosing()). Must be atomic to prevent C++ data race
+    // and ensure the main thread sees the updated value before processing WM_CLOSE.
+    std::atomic<bool> m_closing { false };
+    std::optional<bool> m_testDialogAnswer; // pre-armed answer for test mode
     float m_hRatio { 0.5f };
     float m_vRatio { 0.5f };
     Drag  m_drag   { Drag::Idle };
