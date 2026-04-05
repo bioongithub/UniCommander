@@ -260,7 +260,7 @@ using Hit = uc::BaseWindow::Hit;
 }
 - (BOOL)windowShouldClose:(id)__unused sender
 {
-    return _owner->confirmQuit() ? YES : NO;
+    return (_owner->isClosing() || _owner->confirmQuit()) ? YES : NO;
 }
 @end
 
@@ -339,6 +339,7 @@ void CocoaWindow::run()
 
 void CocoaWindow::close()
 {
+    m_closing = true;
     if (m_window)
         [m_window close];
 }
