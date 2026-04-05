@@ -39,6 +39,15 @@ class TestDriver:
 
     def reset(self):
         self.send(f"reset {self._initial_dir}")
+        line = self.proc.stdout.readline().strip()
+        state = dict(pair.split("=", 1) for pair in line.split())
+        assert state.get("focus")         == "left",              f"reset: focus={state.get('focus')!r}"
+        assert state.get("leftSelected")  == "0",                 f"reset: leftSelected={state.get('leftSelected')!r}"
+        assert state.get("rightSelected") == "0",                 f"reset: rightSelected={state.get('rightSelected')!r}"
+        assert state.get("leftPath")      == self._initial_dir,   f"reset: leftPath={state.get('leftPath')!r}"
+        assert state.get("rightPath")     == self._initial_dir,   f"reset: rightPath={state.get('rightPath')!r}"
+        assert state.get("hRatio")        == "0.5",               f"reset: hRatio={state.get('hRatio')!r}"
+        assert state.get("vRatio")        == "0.5",               f"reset: vRatio={state.get('vRatio')!r}"
 
     def state(self):
         self.send("state")

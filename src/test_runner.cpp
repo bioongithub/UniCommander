@@ -50,7 +50,11 @@ static void testLoop(std::weak_ptr<uc::Window> winWeak)
         {
             std::string dir = line.substr(6);
             auto* base = dynamic_cast<uc::BaseWindow*>(win.get());
-            if (base) base->resetState(dir);
+            if (base)
+            {
+                base->resetState(dir);
+                std::cout << win->stateSnapshot() << "\n";
+            }
             continue;
         }
 

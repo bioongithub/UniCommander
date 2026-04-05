@@ -34,7 +34,7 @@ The driver waits for this line before sending any commands.
 | Command | Description |
 |---|---|
 | `keydown <key>` | Simulate a key press |
-| `reset <dir>` | Reinitialise both panels to `<dir>`, restore default state |
+| `reset <dir>` | Reinitialise both panels to `<dir>`, restore default state; responds with a state snapshot |
 | `click <x> <y>` | Mouse button down + up at pixel coords |
 | `mousedown <x> <y>` | Mouse button down |
 | `mousemove <x> <y>` | Mouse move (drag) |
