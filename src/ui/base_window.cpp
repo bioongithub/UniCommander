@@ -53,6 +53,10 @@ void BaseWindow::handleKeyDown(Key key)
             if (auto* p = focusedPanel()) { p->activate(); invalidate(); }
             break;
 
+        case Key::F10:
+            if (confirmQuit()) close();
+            break;
+
         default:
             break;
     }

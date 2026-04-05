@@ -314,6 +314,7 @@ void X11Window::run()
                     case XK_Tab:      handleKeyDown(Key::Tab);    break;
                     case XK_Escape:   handleKeyDown(Key::Escape); break;
                     case XK_q:        handleKeyDown(Key::Q);      m_running = false; break;
+                    case XK_F10:      handleKeyDown(Key::F10);    break;
                     default: break;
                 }
                 break;
@@ -321,7 +322,12 @@ void X11Window::run()
 
             case ClientMessage:
                 if (static_cast<Atom>(event.xclient.data.l[0]) == wm_delete)
-                    m_running = false;
+                {
+                    if (m_closing || confirmQuit())
+                        m_running = false;
+                    else
+                        paint();    // restore window after cancelled dialog
+                }
                 break;
 
             default:
@@ -337,6 +343,7 @@ void X11Window::invalidate()
 
 void X11Window::close()
 {
+    m_closing = true;
     if (!m_display || !m_window) { m_running = false; return; }
     // Post WM_DELETE_WINDOW to ourselves to unblock XNextEvent
     Atom wm_protocols = XInternAtom(m_display, "WM_PROTOCOLS",    False);
@@ -350,6 +357,144 @@ void X11Window::close()
     XSendEvent(m_display, m_window, False, NoEventMask,
                reinterpret_cast<XEvent*>(&ev));
     XFlush(m_display);
+}
+
+bool X11Window::confirmQuit()
+{
+    if (m_testDialogAnswer.has_value())
+    {
+        bool ans = *m_testDialogAnswer;
+        m_testDialogAnswer.reset();
+        return ans;
+    }
+
+    GC    gc = reinterpret_cast<GC>(m_gc);
+    auto* fs = reinterpret_cast<XFontStruct*>(m_fontInfo);
+
+    const int dlgW = 300, dlgH = 110;
+    const int btnW = 80,  btnH = 28;
+
+    // Dialog and button positions — recalculated on resize
+    int dlgX = (m_width  - dlgW) / 2;
+    int dlgY = (m_height - dlgH) / 2;
+    int btnY = dlgY + dlgH - btnH - 12;
+    int yesX = dlgX + dlgW / 2 - btnW - 10;
+    int noX  = dlgX + dlgW / 2 + 10;
+
+    // Local colors
+    unsigned long dlgBgPx  = allocRGB(m_display, 40,  40,  55);
+    unsigned long btnBgPx  = allocRGB(m_display, 55,  55,  75);
+
+    // focused: 0 = Yes, 1 = No  (default No — safer)
+    int focused = 1;
+
+    auto drawDialog = [&]()
+    {
+        // Dialog border + background
+        XSetForeground(m_display, gc, m_borderFocPx);
+        XDrawRectangle(m_display, m_window, gc,
+                       dlgX - 1, dlgY - 1,
+                       static_cast<unsigned>(dlgW + 1),
+                       static_cast<unsigned>(dlgH + 1));
+        XSetForeground(m_display, gc, dlgBgPx);
+        XFillRectangle(m_display, m_window, gc,
+                       dlgX, dlgY,
+                       static_cast<unsigned>(dlgW),
+                       static_cast<unsigned>(dlgH));
+
+        // Title text
+        const char* msg  = "Quit UniCommander?";
+        int         mlen = static_cast<int>(strlen(msg));
+        int         mw   = fs ? XTextWidth(fs, msg, mlen) : mlen * 7;
+        int         my   = dlgY + (dlgH - btnH - 20) / 2
+                           + (fs ? fs->ascent : 11);
+        XSetForeground(m_display, gc, m_selTextPx);
+        XDrawString(m_display, m_window, gc,
+                    dlgX + (dlgW - mw) / 2, my, msg, mlen);
+
+        // Draw one button: helper lambda
+        auto drawBtn = [&](int bx, int by, const char* label, bool hot)
+        {
+            XSetForeground(m_display, gc, hot ? m_selFocPx : btnBgPx);
+            XFillRectangle(m_display, m_window, gc,
+                           bx, by,
+                           static_cast<unsigned>(btnW),
+                           static_cast<unsigned>(btnH));
+            XSetForeground(m_display, gc, m_borderFocPx);
+            XDrawRectangle(m_display, m_window, gc,
+                           bx, by,
+                           static_cast<unsigned>(btnW),
+                           static_cast<unsigned>(btnH));
+            int llen = static_cast<int>(strlen(label));
+            int lw   = fs ? XTextWidth(fs, label, llen) : llen * 7;
+            int ly   = by + (btnH + (fs ? fs->ascent : 11)) / 2
+                       - (fs ? fs->descent : 2);
+            XSetForeground(m_display, gc, m_selTextPx);
+            XDrawString(m_display, m_window, gc,
+                        bx + (btnW - lw) / 2, ly, label, llen);
+        };
+
+        drawBtn(yesX, btnY, "Yes", focused == 0);
+        drawBtn(noX,  btnY, "No",  focused == 1);
+        XFlush(m_display);
+    };
+
+    drawDialog();
+
+    // Mini event loop — runs until user confirms or cancels
+    XEvent ev = {};
+    while (true)
+    {
+        XNextEvent(m_display, &ev);
+
+        if (ev.type == Expose && ev.xexpose.count == 0)
+        {
+            paint();
+            drawDialog();
+        }
+        else if (ev.type == ConfigureNotify)
+        {
+            setSize(ev.xconfigure.width, ev.xconfigure.height);
+            dlgX = (m_width  - dlgW) / 2;
+            dlgY = (m_height - dlgH) / 2;
+            btnY = dlgY + dlgH - btnH - 12;
+            yesX = dlgX + dlgW / 2 - btnW - 10;
+            noX  = dlgX + dlgW / 2 + 10;
+            paint();
+            drawDialog();
+        }
+        else if (ev.type == KeyPress)
+        {
+            KeySym ks = XLookupKeysym(&ev.xkey, 0);
+            if (ks == XK_Return)
+            {
+                if (focused != 0) paint();   // cancel: restore window
+                return focused == 0;
+            }
+            if (ks == XK_Escape || ks == XK_n || ks == XK_N)
+            {
+                paint();
+                return false;
+            }
+            if (ks == XK_y || ks == XK_Y)
+                return true;
+            if (ks == XK_Tab || ks == XK_Left || ks == XK_Right)
+            {
+                focused = 1 - focused;
+                drawDialog();
+            }
+        }
+        else if (ev.type == ButtonPress && ev.xbutton.button == Button1)
+        {
+            int mx = ev.xbutton.x, my = ev.xbutton.y;
+            bool onYes = (mx >= yesX && mx < yesX + btnW &&
+                          my >= btnY && my < btnY + btnH);
+            bool onNo  = (mx >= noX  && mx < noX  + btnW &&
+                          my >= btnY && my < btnY + btnH);
+            if (onYes) return true;
+            if (onNo)  { paint(); return false; }
+        }
+    }
 }
 
 std::unique_ptr<uc::Window> createWindow()

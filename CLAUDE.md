@@ -254,7 +254,7 @@ the bottom. Esc = cancel (never quit).
 
 #### F-key bar + quit
 - [ ] F-key bar rendered at bottom (F1–F10 labels, always visible)
-- [ ] F10 — Quit (and Cmd+Q on macOS, Alt+F4 on Windows)
+- [x] F10 — Quit with confirmation dialog (and Cmd+Q on macOS, close button / Alt+F4 on Windows)
 
 #### Navigation
 - [ ] Ctrl+\\ — Go to root of current panel's drive
@@ -296,6 +296,21 @@ features TBD as the project evolves.
 - [ ] Quick filter — type to filter entries in active panel (incremental search)
 - [ ] Configurable color themes
 - [ ] Column view option (name / size / date / attributes)
+
+## Second-priority refactoring backlog
+
+These are known architectural improvements that are not blocking current features
+but should be addressed before the codebase grows further.
+
+### Test harness: async key dispatch
+
+Currently the test thread calls `handleKeyDown()` synchronously, which blocks
+it for the duration of any operation (including future modal dialogs). The fix
+is to post key events to a thread-safe queue and have the main platform thread
+drain the queue, keeping the test thread always free to read the next stdin line.
+
+This is required before `click`, `mousedown`, `mousemove`, `mouseup`, and `size`
+commands can be implemented reliably.
 
 ## Feature Development Rule
 

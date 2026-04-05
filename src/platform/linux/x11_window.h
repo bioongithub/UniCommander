@@ -14,10 +14,11 @@ public:
     ~X11Window() override;
 
     bool create(const std::string& title, int width, int height) override;
-    void show()       override;
-    void run()        override;
-    void close()      override;
-    void invalidate() override;
+    void show()        override;
+    void run()         override;
+    void close()       override;
+    void invalidate()  override;
+    bool confirmQuit() override;
 
 private:
     void paint();

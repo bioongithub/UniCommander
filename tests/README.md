@@ -34,14 +34,15 @@ The driver waits for this line before sending any commands.
 | Command | Description |
 |---|---|
 | `keydown <key>` | Simulate a key press |
+| `dialog yes\|no` | Pre-arm the next confirmation dialog; `confirmQuit()` returns the answer immediately without showing a native dialog |
 | `reset <dir>` | Reinitialise both panels to `<dir>`, restore default state; responds with a state snapshot |
-| `click <x> <y>` | Mouse button down + up at pixel coords |
-| `mousedown <x> <y>` | Mouse button down |
-| `mousemove <x> <y>` | Mouse move (drag) |
-| `mouseup <x> <y>` | Mouse button up |
-| `size <w> <h>` | Resize the window to w×h pixels |
 | `state` | Request a state snapshot (see below) |
-| `quit` | Close the app and exit |
+| `quit` | Emergency close — bypasses confirmation dialog; use F10 for normal exit |
+| `click <x> <y>` | Mouse button down + up at pixel coords *(not yet implemented)* |
+| `mousedown <x> <y>` | Mouse button down *(not yet implemented)* |
+| `mousemove <x> <y>` | Mouse move (drag) *(not yet implemented)* |
+| `mouseup <x> <y>` | Mouse button up *(not yet implemented)* |
+| `size <w> <h>` | Resize the window to w×h pixels *(not yet implemented)* |
 
 #### Key names for `keydown`
 
@@ -90,8 +91,9 @@ from driver import TestDriver
 app = TestDriver("path/to/unicommander", "/initial/dir")  # spawns process, waits for "ready"
 app.send("keydown down")                                  # raw command
 app.reset()                                               # sends "reset <initial_dir>"
+app.dialog("yes")                                         # pre-arm next confirmation dialog
 state = app.state()                                       # sends "state", returns dict[str, str]
-app.quit()                                                # sends "quit", waits for process exit
+app.quit()                                                # emergency: sends "quit", waits for process exit
 ```
 
 ### `TestCase` — base class for test suites

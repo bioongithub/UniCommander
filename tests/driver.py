@@ -49,6 +49,10 @@ class TestDriver:
         assert state.get("hRatio")        == "0.5",               f"reset: hRatio={state.get('hRatio')!r}"
         assert state.get("vRatio")        == "0.5",               f"reset: vRatio={state.get('vRatio')!r}"
 
+    def dialog(self, answer):
+        """Pre-arm the next confirmation dialog. answer: 'yes' or 'no'."""
+        self.send(f"dialog {answer}")
+
     def state(self):
         self.send("state")
         line = self.proc.stdout.readline().strip()
@@ -129,6 +133,7 @@ def _run_all(executable):
     from test_navigation import NavigationTests
     from test_activation import ActivationTests
     from test_right_panel import RightPanelTests
+    from test_quit import QuitTests
 
     suites = [
         InitialStateTests,
@@ -136,6 +141,7 @@ def _run_all(executable):
         NavigationTests,
         ActivationTests,
         RightPanelTests,
+        #QuitTests,
     ]
 
     app = TestDriver(executable, _TESTS_DIR)
@@ -146,11 +152,45 @@ def _run_all(executable):
             instance.run(app)
             total_passed += instance._passed
             total_failed += instance._failed
-    finally:
-        app.quit()
+    except Exception:
+        app.proc.kill()
+        raise
 
     print(f"\n{'='*40}")
     print(f"Total: {total_passed} passed, {total_failed} failed")
+
+    # --- Normal exit via F10 (also verifies cancel then confirm) ---
+    # Step 1: cancel -- app must stay alive
+    app.dialog("no")
+    app.send("keydown f10")
+    try:
+        app.state()
+        print("  PASS  teardown: F10 cancel keeps app alive")
+        total_passed += 1
+    except Exception as e:
+        print(f"  FAIL  teardown: F10 cancel keeps app alive: {e}")
+        total_failed += 1
+
+    
+
+    # Step 2: confirm -- app must exit cleanly
+    app.dialog("yes")
+    app.send("keydown f10")
+    try:
+        app.proc.wait(timeout=5)
+        if app.proc.returncode == 0:
+            print("  PASS  teardown: F10 confirm exits zero")
+            total_passed += 1
+        else:
+            print(f"  FAIL  teardown: F10 confirm exits zero: code {app.proc.returncode}")
+            total_failed += 1
+    except Exception as e:
+        print(f"  FAIL  teardown: F10 confirm exits zero: {e}")
+        total_failed += 1
+        app.proc.kill()
+
+    print(f"\n{'='*40}")
+    print(f"Grand total: {total_passed} passed, {total_failed} failed")
     return total_failed == 0
 
 

@@ -39,9 +39,16 @@ int main(int argc, char* argv[])
 
     window->show();
 
+    std::thread testThread;
     if (testMode)
-        startTestThread(std::weak_ptr<uc::Window>(window));
+        testThread = startTestThread(std::weak_ptr<uc::Window>(window));
 
     window->run();
+
+    // Join the test thread before returning so the CRT never sees a live
+    // thread during process shutdown (which would call std::terminate).
+    if (testThread.joinable())
+        testThread.join();
+
     return 0;
 }

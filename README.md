@@ -25,6 +25,15 @@ cmake --build build
 build\Debug\unicommander.exe
 ```
 
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| Arrow Up / Down | Navigate entries in the active panel |
+| Enter | Enter directory / go to parent via `..` |
+| Tab | Switch focus between left and right panel |
+| F10 | Quit (confirmation dialog) |
+
 ## Testing
 
 The test suite drives the app as a subprocess via a stdin/stdout text protocol.

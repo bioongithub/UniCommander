@@ -184,6 +184,7 @@ using Hit = uc::BaseWindow::Hit;
         case 48:  _owner->handleKeyDown(Key::Tab);    break;  // tab
         case 53:  _owner->handleKeyDown(Key::Escape); break;  // escape
         case 12:  _owner->handleKeyDown(Key::Q);      break;  // q
+        case 109: _owner->handleKeyDown(Key::F10);    break;  // F10
         default:  [super keyDown:event]; break;
     }
 }
@@ -242,14 +243,46 @@ using Hit = uc::BaseWindow::Hit;
 
 @end
 
+// --- Window delegate (handles close button and Cmd+Q) ---
+@interface UCWindowDelegate : NSObject <NSWindowDelegate>
+{
+    CocoaWindow* _owner;
+}
+- (instancetype)initWithOwner:(CocoaWindow*)owner;
+@end
+
+@implementation UCWindowDelegate
+- (instancetype)initWithOwner:(CocoaWindow*)owner
+{
+    if ((self = [super init]))
+        _owner = owner;
+    return self;
+}
+- (BOOL)windowShouldClose:(id)__unused sender
+{
+    return _owner->confirmQuit() ? YES : NO;
+}
+@end
+
 // --- AppDelegate ---
 @interface AppDelegate : NSObject <NSApplicationDelegate>
+{
+    CocoaWindow* _owner;
+}
+- (void)setOwner:(CocoaWindow*)owner;
 @end
 
 @implementation AppDelegate
+- (void)setOwner:(CocoaWindow*)owner { _owner = owner; }
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)__unused sender
 {
     return YES;
+}
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication*)__unused sender
+{
+    if (_owner && !_owner->confirmQuit())
+        return NSTerminateCancel;
+    return NSTerminateNow;
 }
 @end
 
@@ -263,6 +296,7 @@ bool CocoaWindow::create(const std::string& title, int width, int height)
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 
     m_delegate = [[AppDelegate alloc] init];
+    [m_delegate setOwner:this];
     [NSApp setDelegate:m_delegate];
 
     NSRect frame = NSMakeRect(0, 0, width, height);
@@ -284,6 +318,10 @@ bool CocoaWindow::create(const std::string& title, int width, int height)
     [m_window setTitle:[NSString stringWithUTF8String:title.c_str()]];
     [m_window makeFirstResponder:view];
     [m_window center];
+
+    m_winDelegate = [[UCWindowDelegate alloc] initWithOwner:this];
+    [m_window setDelegate:m_winDelegate];
+
     return true;
 }
 
@@ -309,6 +347,23 @@ void CocoaWindow::invalidate()
 {
     if (m_window)
         [m_window.contentView setNeedsDisplay:YES];
+}
+
+bool CocoaWindow::confirmQuit()
+{
+    if (m_testDialogAnswer.has_value())
+    {
+        bool ans = *m_testDialogAnswer;
+        m_testDialogAnswer.reset();
+        return ans;
+    }
+    NSAlert* alert = [[NSAlert alloc] init];
+    [alert setMessageText:@"Quit UniCommander?"];
+    [alert setInformativeText:@"Are you sure you want to quit?"];
+    [alert addButtonWithTitle:@"Yes"];
+    [alert addButtonWithTitle:@"No"];
+    [alert setAlertStyle:NSAlertStyleWarning];
+    return [alert runModal] == NSAlertFirstButtonReturn;
 }
 
 std::unique_ptr<uc::Window> createWindow()
