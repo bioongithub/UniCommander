@@ -1,5 +1,7 @@
 #pragma once
 #include "ui/base_window.h"
+#include <condition_variable>
+#include <mutex>
 
 // Forward-declare X11 internals without pulling in <X11/Xlib.h>,
 // which defines a conflicting global 'Window' typedef.
@@ -54,4 +56,10 @@ private:
 
     // Atom for test-thread key dispatch (client message UC_KEY_DOWN)
     unsigned long m_atomKeyDown { 0 };
+
+    // Synchronise scheduleKeyDown(): test thread blocks until the main thread
+    // finishes handling the key (mirrors Win32 SendMessage synchronous semantics).
+    std::mutex              m_keyMutex;
+    std::condition_variable m_keyCv;
+    bool                    m_keyProcessed { false };
 };

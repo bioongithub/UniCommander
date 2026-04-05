@@ -333,6 +333,12 @@ void X11Window::run()
                     // Dispatched from scheduleKeyDown() on the test thread.
                     // Runs here on the main thread, serialised with rendering.
                     handleKeyDown(static_cast<Key>(event.xclient.data.l[0]));
+                    // Signal scheduleKeyDown() that the key has been fully processed.
+                    {
+                        std::lock_guard<std::mutex> lk(m_keyMutex);
+                        m_keyProcessed = true;
+                    }
+                    m_keyCv.notify_one();
                 }
                 else if (static_cast<Atom>(event.xclient.data.l[0]) == wm_delete)
                 {
@@ -376,7 +382,15 @@ void X11Window::scheduleKeyDown(Key key)
 {
     // Post a UC_KEY_DOWN client message so handleKeyDown() runs on the main
     // thread (serialised with XNextEvent / paint), not on the test thread.
+    // Then block until the main thread signals that it has finished handling
+    // the key — this gives scheduleKeyDown() the same synchronous semantics
+    // as Win32's SendMessage(WM_APP+1), so state queries issued immediately
+    // after return see the updated panel state.
     if (!m_display || !m_window) return;
+
+    std::unique_lock<std::mutex> lock(m_keyMutex);
+    m_keyProcessed = false;
+
     XClientMessageEvent ev = {};
     ev.type         = ClientMessage;
     ev.window       = m_window;
@@ -386,6 +400,8 @@ void X11Window::scheduleKeyDown(Key key)
     XSendEvent(m_display, m_window, False, NoEventMask,
                reinterpret_cast<XEvent*>(&ev));
     XFlush(m_display);
+
+    m_keyCv.wait(lock, [this] { return m_keyProcessed; });
 }
 
 bool X11Window::confirmQuit()
