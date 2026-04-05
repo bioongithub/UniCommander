@@ -14,11 +14,12 @@ public:
     ~X11Window() override;
 
     bool create(const std::string& title, int width, int height) override;
-    void show()        override;
-    void run()         override;
-    void close()       override;
-    void invalidate()  override;
-    bool confirmQuit() override;
+    void show()             override;
+    void run()              override;
+    void close()            override;
+    void invalidate()       override;
+    bool confirmQuit()      override;
+    void scheduleKeyDown(Key key) override;
 
 private:
     void paint();
@@ -47,7 +48,10 @@ private:
     unsigned long m_bottomTextPx { 0 };
 
     // Cursors (X11 Cursor = unsigned long)
-    unsigned long m_curArrow { 0 };
-    unsigned long m_curNS    { 0 };
-    unsigned long m_curEW    { 0 };
+    unsigned long m_curArrow    { 0 };
+    unsigned long m_curNS       { 0 };
+    unsigned long m_curEW       { 0 };
+
+    // Atom for test-thread key dispatch (client message UC_KEY_DOWN)
+    unsigned long m_atomKeyDown { 0 };
 };

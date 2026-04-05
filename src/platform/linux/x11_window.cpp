@@ -43,6 +43,11 @@ X11Window::~X11Window()
 
 bool X11Window::create(const std::string& title, int width, int height)
 {
+    // Must be called before any other Xlib call so the test background thread
+    // can safely call XSendEvent (scheduleKeyDown) while the main thread is in
+    // XNextEvent.
+    XInitThreads();
+
     m_display = XOpenDisplay(nullptr);
     if (!m_display) return false;
 
@@ -101,6 +106,8 @@ bool X11Window::create(const std::string& title, int width, int height)
     m_curNS    = XCreateFontCursor(m_display, XC_sb_v_double_arrow);
     m_curEW    = XCreateFontCursor(m_display, XC_sb_h_double_arrow);
     XDefineCursor(m_display, m_window, m_curArrow);
+
+    m_atomKeyDown = XInternAtom(m_display, "UC_KEY_DOWN", False);
 
     initPanels(std::filesystem::current_path().string());
 
@@ -321,7 +328,13 @@ void X11Window::run()
             }
 
             case ClientMessage:
-                if (static_cast<Atom>(event.xclient.data.l[0]) == wm_delete)
+                if (static_cast<Atom>(event.xclient.message_type) == m_atomKeyDown)
+                {
+                    // Dispatched from scheduleKeyDown() on the test thread.
+                    // Runs here on the main thread, serialised with rendering.
+                    handleKeyDown(static_cast<Key>(event.xclient.data.l[0]));
+                }
+                else if (static_cast<Atom>(event.xclient.data.l[0]) == wm_delete)
                 {
                     if (m_closing || confirmQuit())
                         m_running = false;
@@ -354,6 +367,22 @@ void X11Window::close()
     ev.message_type = wm_protocols;
     ev.format       = 32;
     ev.data.l[0]    = static_cast<long>(wm_delete);
+    XSendEvent(m_display, m_window, False, NoEventMask,
+               reinterpret_cast<XEvent*>(&ev));
+    XFlush(m_display);
+}
+
+void X11Window::scheduleKeyDown(Key key)
+{
+    // Post a UC_KEY_DOWN client message so handleKeyDown() runs on the main
+    // thread (serialised with XNextEvent / paint), not on the test thread.
+    if (!m_display || !m_window) return;
+    XClientMessageEvent ev = {};
+    ev.type         = ClientMessage;
+    ev.window       = m_window;
+    ev.message_type = m_atomKeyDown;
+    ev.format       = 32;
+    ev.data.l[0]    = static_cast<long>(key);
     XSendEvent(m_display, m_window, False, NoEventMask,
                reinterpret_cast<XEvent*>(&ev));
     XFlush(m_display);
