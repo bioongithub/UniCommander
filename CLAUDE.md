@@ -168,22 +168,22 @@ UniCommander/
 | Cursor shape changes on dividers | ✓ | ✓ | ✓ |
 | Panel focus via mouse click | ✓ | ✓ | ✓ |
 | Tab to switch panel focus | ✓ | ✓ | ✓ |
-| DirectoryPanel rendering (path header, entry rows, scroll) | ✓ | — | — |
-| Arrow key navigation (Up / Down) | ✓ | — | — |
-| Enter to activate (enter dir / go to `..`) | ✓ | — | — |
-| Q / Escape to quit | — | — | ✓ |
+| DirectoryPanel rendering (path header, entry rows, scroll) | ✓ | ✓ | ✓ |
+| Arrow key navigation (Up / Down) | ✓ | ✓ | ✓ |
+| Enter to activate (enter dir / go to `..`) | ✓ | ✓ | ✓ |
+| Q to quit | — | — | ✓ |
+| stdin/stdout test harness (`--test` mode) | ✓ | ✓ | ✓ |
 
 ### Not yet implemented
 
-- DirectoryPanel rendering on Cocoa and X11 (those platforms show placeholder labels)
-- Arrow key navigation and Enter on Cocoa and X11
+- Unified quit shortcut on Win32 and Cocoa (X11 quits on Q; Win32 and Cocoa do not)
 - In-app help page / dialog
 - Function key bar (F3 view, F5 copy, F6 move, F7 mkdir, F8 delete, F10 quit)
 - File operations: copy, move, delete, rename, create directory
 - File viewer (F3)
 - Search / filter within a panel
 - TerminalPanel (stub only)
-- Unit tests (none yet)
+- Catch2 unit tests for DirectoryPanel
 
 ## Development Plan
 
@@ -192,159 +192,60 @@ Phases are ordered by dependency. Complete each phase before starting the next.
 ### Phase 1 — Platform parity
 Bring Cocoa and X11 up to the same feature level as Win32.
 
-- [ ] DirectoryPanel rendering on X11 (path header, entry list, selection highlight, scroll)
-- [ ] Arrow key navigation + Enter on X11
-- [ ] DirectoryPanel rendering on Cocoa
-- [ ] Arrow key navigation + Enter on Cocoa
-- [ ] Unified quit shortcut (Q / Escape / Cmd+Q) across all platforms
+- [x] DirectoryPanel rendering on X11 (path header, entry list, selection highlight, scroll)
+- [x] Arrow key navigation + Enter on X11
+- [x] DirectoryPanel rendering on Cocoa
+- [x] Arrow key navigation + Enter on Cocoa
+- [ ] Unified quit shortcut (F10 / Cmd+Q) across all platforms — Escape is NOT a quit key
 
 ### Phase 2 — Infrastructure
 Foundation required before user-visible features can be built reliably.
 
-- [ ] UI test harness (see detailed plan below)
+- [x] UI test harness (see implementation notes below)
 - [ ] In-app help dialog / overlay (keyboard shortcut reference, accessible via F1 or ?)
-- [ ] Catch2 unit tests for `DirectoryPanel` (sorting, navigation, scroll, edge cases) — after harness is in place
+- [ ] Catch2 unit tests for `DirectoryPanel` (sorting, navigation, scroll, edge cases)
 
-### UI Test Harness — Detailed Plan
+### UI Test Harness — Implementation Notes
 
-#### Architecture: stdin/stdout protocol
+**Status: implemented.** See `tests/` directory and `src/test_runner.cpp`.
 
-The app runs in headless `--test` mode (no window, no display required).
-An external Python script drives it as a subprocess via stdin/stdout pipes.
-This keeps all test code outside the app and works identically on all 3 platforms.
+#### Architecture
+
+The app runs in `--test` mode (same platform window, no display required on CI).
+A background thread (`startTestThread` in `src/test_runner.cpp`) reads stdin and
+dispatches commands. The Python driver in `tests/driver.py` wraps the subprocess.
 
 ```
-Python script                    unicommander --test
-─────────────────                ───────────────────
+Python script                    unicommander --test <dir>
+─────────────────                ─────────────────────────
+                           ←     "ready\n"
 send: "keydown down\n"    →      handleKeyDown(Key::Down)
-send: "keydown down\n"    →      handleKeyDown(Key::Down)
-send: "state\n"           →      print state snapshot
-receive: "selected=2 ..." ←
-assert state["selected"] == 2
-```
-
-Python test example:
-```python
-app = TestDriver("unicommander")   # wraps subprocess
-app.keydown("down")
-app.keydown("down")
-state = app.state()
-assert state["selected"] == 2
-assert state["focus"] == "left"
-
-for _ in range(3):
-    app.keydown("down")
-state = app.state()
-assert state["selected"] == 5
+send: "state\n"           →      prints state snapshot
+receive: "focus=left ..." ←
+assert state["leftSelected"] == 1
 ```
 
 #### State snapshot format (one line, key=value pairs)
 ```
-focus=left leftSelected=2 rightSelected=0 leftPath=/home/user rightPath=/home/user hRatio=0.5 vRatio=0.5
+focus=left leftSelected=2 rightSelected=0 leftPath=/home/user rightPath=/home/user leftEntries=../ ,foo/,[bar],baz rightEntries=... hRatio=0.5 vRatio=0.5
 ```
+Entry list format: comma-separated names; directories have a trailing `/`.
 
 #### Command set (stdin, one command per line)
 ```
 keydown <key>          # keys: up down return tab escape q f1..f10
-click <x> <y>          # mouse button down + up at coords
-mousedown <x> <y>
-mousemove <x> <y>
-mouseup <x> <y>
-size <w> <h>           # resize the test window
-state                  # request state snapshot → written to stdout
-quit                   # exit the test runner
+state                  # request state snapshot -> written to stdout
+reset <dir>            # reset both panels to <dir>, restore default ratios/focus; returns snapshot
+quit                   # close app and exit
 ```
 
-#### App-side steps
+Not yet implemented: `click`, `mousedown`, `mousemove`, `mouseup`, `size`.
 
-**Step 1 — `Key` enum in `BaseWindow`**
-Add to `base_window.h`:
-```cpp
-enum class Key { Up, Down, Return, Tab, Escape, Q, F1, F2, F3, F4, F5,
-                 F6, F7, F8, F9, F10 };
-```
-
-**Step 2 — Window size in `BaseWindow`**
-Add `m_width`, `m_height` to `BaseWindow` with `setSize(int w, int h)`.
-Platforms call `setSize()` on create and on every resize event.
-Handle* methods use these stored dimensions instead of querying the OS.
-
-**Step 3 — Virtual `invalidate()` in `BaseWindow`**
-```cpp
-virtual void invalidate() = 0;
-```
-- Win32: `InvalidateRect(m_hwnd, nullptr, FALSE)`
-- Cocoa: `[contentView setNeedsDisplay:YES]`
-- X11: `paint()`
-- TestWindow: no-op
-
-**Step 4 — Event handling methods in `BaseWindow`**
-Move all event logic out of platform files:
-```cpp
-void handleKeyDown  (Key key);
-void handleMouseDown(int x, int y);
-void handleMouseMove(int x, int y);
-void handleMouseUp  (int x, int y);
-```
-Platform-specific concerns that stay in platform code:
-- Win32: `SetCapture` / `ReleaseCapture` around drag
-- Cocoa: `makeFirstResponder` before `handleMouseDown`
-- X11: cursor shape update after `handleMouseMove`
-- All rendering stays in platform code
-
-**Step 5 — Refactor Win32**
-- `WM_SIZE`        → `setSize(LOWORD(lp), HIWORD(lp))`
-- `WM_KEYDOWN`     → translate `wp` → `Key`, call `handleKeyDown(key)`
-- `WM_LBUTTONDOWN` → `handleMouseDown(mx, my)`, then `SetCapture` if dragging
-- `WM_MOUSEMOVE`   → `handleMouseMove(mx, my)`
-- `WM_LBUTTONUP`   → `handleMouseUp(mx, my)`, then `ReleaseCapture`
-
-**Step 6 — Refactor Cocoa**
-- `setFrameSize:` / `viewDidEndLiveResize` → `setSize(w, h)`
-- `keyDown:`      → translate `keyCode` → `Key`, call `handleKeyDown(key)`
-- `mouseDown:`    → `makeFirstResponder`, then `handleMouseDown(x, y)`
-- `mouseDragged:` → `handleMouseMove(x, y)`
-- `mouseUp:`      → `handleMouseUp(x, y)`
-
-**Step 7 — Refactor X11**
-- `ConfigureNotify` → `setSize(w, h)`
-- `KeyPress`        → translate keysym → `Key`, call `handleKeyDown(key)`
-- `ButtonPress`     → `handleMouseDown(x, y)`
-- `MotionNotify`    → `handleMouseMove(x, y)`, then update cursor (platform-only)
-- `ButtonRelease`   → `handleMouseUp(x, y)`
-
-**Step 8 — `TestWindow` class**
-Add `tests/test_window.h`:
-- Inherits `BaseWindow`
-- `create()` calls `initPanels(tempPath)` and `setSize(800, 600)`, no OS calls
-- `show()`, `run()`, `close()` — all no-ops
-- `invalidate()` — no-op
-- `stateSnapshot()` — returns the state string for stdout
-
-**Step 9 — `--test` mode in `main.cpp`**
-```cpp
-if (argc > 1 && std::string(argv[1]) == "--test") {
-    TestWindow win;
-    win.create("", 800, 600);
-    runTestLoop(win);   // reads stdin, dispatches commands, writes state
-    return 0;
-}
-```
-`runTestLoop` is ~50 lines in `src/test_runner.cpp` (not compiled in normal builds).
-
-**Step 10 — Python `TestDriver` helper**
-Add `tests/driver.py`:
-- Wraps `subprocess.Popen`
-- Methods: `keydown(key)`, `click(x, y)`, `size(w, h)`, `state()` → dict, `quit()`
-- `state()` sends `"state\n"` and parses the response line into a dict
-
-**Step 11 — Initial Python test scripts**
-Add `tests/test_navigation.py`, `tests/test_focus.py`, etc.:
-- Navigation: Up/Down moves selection, clamps at bounds
-- Enter: activates directory, path changes; `..` goes to parent
-- Tab: switches focus between panels
-- Click: panel focus follows mouse
-- Hit testing: click on known divider coords, check drag state via hRatio change
+#### Files
+- `src/test_runner.h` / `src/test_runner.cpp` — `startTestThread(weak_ptr<Window>)`
+- `tests/driver.py` — `TestDriver` (protocol) + `TestCase` (test runner base)
+- `tests/utils.py` — `entries_for(path)` filesystem helper
+- `tests/test_initial_state.py`, `test_focus.py`, `test_navigation.py`, `test_activation.py`, `test_right_panel.py`
 
 ### Phase 3 — Core file manager features
 Classic commander functionality.

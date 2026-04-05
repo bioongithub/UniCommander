@@ -312,7 +312,7 @@ void X11Window::run()
                     case XK_Down:     handleKeyDown(Key::Down);   break;
                     case XK_Return:   handleKeyDown(Key::Return); break;
                     case XK_Tab:      handleKeyDown(Key::Tab);    break;
-                    case XK_Escape:   handleKeyDown(Key::Escape); m_running = false; break;
+                    case XK_Escape:   handleKeyDown(Key::Escape); break;
                     case XK_q:        handleKeyDown(Key::Q);      m_running = false; break;
                     default: break;
                 }
