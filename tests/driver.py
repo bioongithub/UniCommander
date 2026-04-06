@@ -48,6 +48,9 @@ class TestDriver:
         assert state.get("rightPath")     == self._initial_dir,   f"reset: rightPath={state.get('rightPath')!r}"
         assert state.get("hRatio")        == "0.5",               f"reset: hRatio={state.get('hRatio')!r}"
         assert state.get("vRatio")        == "0.5",               f"reset: vRatio={state.get('vRatio')!r}"
+        assert state.get("modAlt")        == "0",                 f"reset: modAlt={state.get('modAlt')!r}"
+        assert state.get("modShift")      == "0",                 f"reset: modShift={state.get('modShift')!r}"
+        assert state.get("modCtrl")       == "0",                 f"reset: modCtrl={state.get('modCtrl')!r}"
 
     def dialog(self, answer):
         """Pre-arm the next confirmation dialog. answer: 'yes' or 'no'."""
@@ -133,7 +136,8 @@ def _run_all(executable):
     from test_navigation import NavigationTests
     from test_activation import ActivationTests
     from test_right_panel import RightPanelTests
-    from test_quit import QuitTests
+    from test_fkey_bar import FKeyBarTests
+    from test_modifiers import ModifierTests
 
     suites = [
         InitialStateTests,
@@ -141,7 +145,8 @@ def _run_all(executable):
         NavigationTests,
         ActivationTests,
         RightPanelTests,
-        #QuitTests,
+        FKeyBarTests,
+        ModifierTests,
     ]
 
     app = TestDriver(executable, _TESTS_DIR)

@@ -97,6 +97,43 @@ static void testLoop(std::weak_ptr<uc::Window> winWeak)
             continue;
         }
 
+        if (line.substr(0, 10) == "fkeyclick ")
+        {
+            std::string nstr = line.substr(10);
+            int n = 0;
+            try { n = std::stoi(nstr); } catch (...) {}
+            if (n < 1 || n > 10)
+            {
+                std::cout << "error fkeyclick out of range: " << nstr << "\n";
+            }
+            else
+            {
+                auto* base = dynamic_cast<uc::BaseWindow*>(win.get());
+                if (base)
+                {
+                    Key key = static_cast<Key>(static_cast<int>(Key::F1) + (n - 1));
+                    base->scheduleKeyDown(key);
+                    if (base->isClosing()) return;
+                }
+            }
+            continue;
+        }
+
+        if (line.substr(0, 9) == "modclick ")
+        {
+            std::string modname = line.substr(9);
+            auto* base = dynamic_cast<uc::BaseWindow*>(win.get());
+            if (base)
+            {
+                using Mod = uc::BaseWindow::Mod;
+                if      (modname == "alt")   base->toggleModifierSticky(Mod::Alt);
+                else if (modname == "shift") base->toggleModifierSticky(Mod::Shift);
+                else if (modname == "ctrl")  base->toggleModifierSticky(Mod::Ctrl);
+                else std::cout << "error unknown modifier: " << modname << "\n";
+            }
+            continue;
+        }
+
         std::cout << "error unknown: " << line << "\n";
     }
 

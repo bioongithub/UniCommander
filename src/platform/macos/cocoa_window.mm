@@ -116,13 +116,14 @@ using Hit = uc::BaseWindow::Hit;
 
 - (void)drawRect:(NSRect)__unused dirty
 {
-    CGFloat W = NSWidth(self.bounds);
-    CGFloat H = NSHeight(self.bounds);
-    auto [topH, leftW] = _owner->computeLayout(static_cast<int>(W), static_cast<int>(H));
+    CGFloat W    = NSWidth(self.bounds);
+    CGFloat H    = NSHeight(self.bounds);
+    CGFloat effH = H - FKEY_H;            // height available above the F-key bar
+    auto [topH, leftW] = _owner->computeLayout(static_cast<int>(W), static_cast<int>(effH));
 
     NSRect hDivR   = NSMakeRect(0,              topH,           W,        DIVIDER_W);
     NSRect vDivR   = NSMakeRect(leftW,          0,              DIVIDER_W, topH);
-    NSRect bottomR = NSMakeRect(0,              topH+DIVIDER_W, W,        H - topH - DIVIDER_W);
+    NSRect bottomR = NSMakeRect(0,              topH+DIVIDER_W, W,        effH - topH - DIVIDER_W);
 
     // Dividers
     [[NSColor colorWithWhite:0.31 alpha:1.0] set];
@@ -150,14 +151,89 @@ using Hit = uc::BaseWindow::Hit;
     [label drawAtPoint:NSMakePoint(NSMidX(bottomR) - sz.width  / 2.0,
                                    NSMidY(bottomR) - sz.height / 2.0)
         withAttributes:attrs];
+
+    // F-key bar
+    [self renderFKeyBar:NSMakeRect(0, effH, W, FKEY_H)];
+}
+
+- (void)renderFKeyBar:(NSRect)bar
+{
+    NSFont* font   = [NSFont userFixedPitchFontOfSize:11.0];
+    CGFloat fontH  = font.ascender - font.descender;
+    CGFloat textY  = bar.origin.y + (FKEY_H - fontH) / 2.0 - font.descender;
+    CGFloat effW   = bar.size.width - MOD_AREA_W;
+    CGFloat cellW  = effW / 10.0;
+    CGFloat numW   = 16.0;
+
+    // --- F-key cells ---
+    for (int i = 0; i < 10; ++i)
+    {
+        CGFloat x = bar.origin.x + i * cellW;
+
+        // Number sub-column
+        NSRect numR = NSMakeRect(x, bar.origin.y, numW, FKEY_H);
+        [[NSColor blackColor] set];
+        NSRectFill(numR);
+        NSString* numStr = [NSString stringWithFormat:@"%d", i + 1];
+        NSSize numSz = [numStr sizeWithAttributes:@{NSFontAttributeName: font}];
+        NSDictionary* numAttrs = @{
+            NSForegroundColorAttributeName: [NSColor colorWithRed:1.0 green:1.0 blue:0.33 alpha:1.0],
+            NSFontAttributeName:            font
+        };
+        [numStr drawAtPoint:NSMakePoint(x + (numW - numSz.width) / 2.0, textY)
+             withAttributes:numAttrs];
+
+        // Label sub-column
+        CGFloat lblW = cellW - numW;
+        NSRect  lblR = NSMakeRect(x + numW, bar.origin.y, lblW, FKEY_H);
+        const char* lbl = uc::BaseWindow::FKEY_LABELS[i];
+        if (lbl[0] != '\0')
+        {
+            [[NSColor colorWithRed:0.0 green:0.67 blue:0.67 alpha:1.0] set];
+            NSRectFill(lblR);
+            NSString* lblStr = [NSString stringWithUTF8String:lbl];
+            NSDictionary* lblAttrs = @{
+                NSForegroundColorAttributeName: [NSColor blackColor],
+                NSFontAttributeName:            font
+            };
+            [lblStr drawAtPoint:NSMakePoint(x + numW + 2.0, textY) withAttributes:lblAttrs];
+        }
+        else
+        {
+            [[NSColor blackColor] set];
+            NSRectFill(lblR);
+        }
+    }
+
+    // --- Modifier cells ---
+    static const char* MOD_LABELS[3] = { "Alt", "Sft", "Ctl" };
+    for (int i = 0; i < 3; ++i)
+    {
+        CGFloat x      = bar.origin.x + effW + i * MOD_CELL_W;
+        bool    active = _owner->modifierActive(static_cast<uc::BaseWindow::Mod>(i));
+        NSRect  modR   = NSMakeRect(x, bar.origin.y, MOD_CELL_W, FKEY_H);
+        if (active)
+            [[NSColor colorWithRed:0.67 green:0.67 blue:0.0 alpha:1.0] set];
+        else
+            [[NSColor colorWithRed:0.0  green:0.0  blue:0.39 alpha:1.0] set];
+        NSRectFill(modR);
+
+        NSString* modStr = [NSString stringWithUTF8String:MOD_LABELS[i]];
+        NSColor*  modFg  = active ? [NSColor blackColor] : [NSColor colorWithWhite:0.78 alpha:1.0];
+        NSDictionary* modAttrs = @{NSForegroundColorAttributeName: modFg, NSFontAttributeName: font};
+        NSSize modSz = [modStr sizeWithAttributes:modAttrs];
+        [modStr drawAtPoint:NSMakePoint(x + (MOD_CELL_W - modSz.width) / 2.0, textY)
+             withAttributes:modAttrs];
+    }
 }
 
 // --- Cursor rects ---
 - (void)resetCursorRects
 {
-    CGFloat W = NSWidth(self.bounds);
-    CGFloat H = NSHeight(self.bounds);
-    auto [topH, leftW] = _owner->computeLayout(static_cast<int>(W), static_cast<int>(H));
+    CGFloat W    = NSWidth(self.bounds);
+    CGFloat H    = NSHeight(self.bounds);
+    CGFloat effH = H - FKEY_H;
+    auto [topH, leftW] = _owner->computeLayout(static_cast<int>(W), static_cast<int>(effH));
 
     [self addCursorRect:NSMakeRect(0,               topH - HIT_ZONE,  W,                    DIVIDER_W + HIT_ZONE*2)
                  cursor:[NSCursor resizeUpDownCursor]];
@@ -194,11 +270,38 @@ using Hit = uc::BaseWindow::Hit;
 {
     [self.window makeFirstResponder:self];
 
-    NSPoint p  = [self convertPoint:event.locationInWindow fromView:nil];
-    CGFloat W  = NSWidth(self.bounds);
-    CGFloat H  = NSHeight(self.bounds);
-    Hit     hit = _owner->hitTest(static_cast<int>(p.x), static_cast<int>(p.y),
-                                  static_cast<int>(W),   static_cast<int>(H));
+    NSPoint p    = [self convertPoint:event.locationInWindow fromView:nil];
+    CGFloat W    = NSWidth(self.bounds);
+    CGFloat H    = NSHeight(self.bounds);
+    CGFloat effH = H - FKEY_H;
+
+    // F-key bar occupies the bottom FKEY_H rows.
+    if (p.y >= effH)
+    {
+        CGFloat effW  = W - MOD_AREA_W;
+        CGFloat cellW = effW / 10.0;
+        if (p.x < effW)
+        {
+            int slot = static_cast<int>(p.x / cellW);
+            slot = std::min(slot, 9);
+            using Key = uc::BaseWindow::Key;
+            Key key = static_cast<Key>(static_cast<int>(Key::F1) + slot);
+            _owner->handleKeyDown(key);
+        }
+        else
+        {
+            int modIdx = static_cast<int>((p.x - effW) / MOD_CELL_W);
+            if (modIdx >= 0 && modIdx < 3)
+            {
+                _owner->toggleModifierSticky(static_cast<uc::BaseWindow::Mod>(modIdx));
+                [self setNeedsDisplay:YES];
+            }
+        }
+        return;
+    }
+
+    Hit hit = _owner->hitTest(static_cast<int>(p.x), static_cast<int>(p.y),
+                              static_cast<int>(W),   static_cast<int>(effH));
 
     _draggingH = (hit == Hit::HorizDivider);
     _draggingV = (hit == Hit::VertDivider);
@@ -218,12 +321,14 @@ using Hit = uc::BaseWindow::Hit;
 
 - (void)mouseDragged:(NSEvent*)event
 {
-    NSPoint p = [self convertPoint:event.locationInWindow fromView:nil];
-    CGFloat W = NSWidth(self.bounds), H = NSHeight(self.bounds);
+    NSPoint p    = [self convertPoint:event.locationInWindow fromView:nil];
+    CGFloat W    = NSWidth(self.bounds);
+    CGFloat H    = NSHeight(self.bounds);
+    CGFloat effH = H - FKEY_H;
 
-    if (_draggingH && H > 0)
+    if (_draggingH && effH > 0)
     {
-        _owner->setHRatio(static_cast<float>(p.y / H));
+        _owner->setHRatio(static_cast<float>(p.y / effH));
         [self setNeedsDisplay:YES];
         [self.window invalidateCursorRectsForView:self];
     }
@@ -233,6 +338,16 @@ using Hit = uc::BaseWindow::Hit;
         [self setNeedsDisplay:YES];
         [self.window invalidateCursorRectsForView:self];
     }
+}
+
+- (void)flagsChanged:(NSEvent*)event
+{
+    NSEventModifierFlags flags = event.modifierFlags;
+    using Mod = uc::BaseWindow::Mod;
+    _owner->setModifierPhysical(Mod::Alt,   (flags & NSEventModifierFlagOption)  != 0);
+    _owner->setModifierPhysical(Mod::Shift, (flags & NSEventModifierFlagShift)   != 0);
+    _owner->setModifierPhysical(Mod::Ctrl,  (flags & NSEventModifierFlagControl) != 0);
+    [self setNeedsDisplay:YES];
 }
 
 - (void)mouseUp:(NSEvent*)__unused event

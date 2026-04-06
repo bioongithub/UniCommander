@@ -34,6 +34,8 @@ The driver waits for this line before sending any commands.
 | Command | Description |
 |---|---|
 | `keydown <key>` | Simulate a key press |
+| `fkeyclick <n>` | Simulate a click on F-key bar cell n (1-10); fires same action as `keydown f<n>` |
+| `modclick <mod>` | Toggle sticky state of a modifier indicator; mod: `alt`, `shift`, `ctrl` |
 | `dialog yes\|no` | Pre-arm the next confirmation dialog; `confirmQuit()` returns the answer immediately without showing a native dialog |
 | `reset <dir>` | Reinitialise both panels to `<dir>`, restore default state; responds with a state snapshot |
 | `state` | Request a state snapshot (see below) |
@@ -70,6 +72,9 @@ Fields are space-separated `key=value` pairs. All fields are always present.
 | `rightEntries` | string | Comma-separated entry names; directories have a trailing `/` |
 | `hRatio` | float | Horizontal split ratio (0.0–1.0) |
 | `vRatio` | float | Vertical split ratio (0.0–1.0) |
+| `modAlt` | `0` \| `1` | Sticky Alt modifier state |
+| `modShift` | `0` \| `1` | Sticky Shift modifier state |
+| `modCtrl` | `0` \| `1` | Sticky Ctrl modifier state |
 
 ### Error responses
 

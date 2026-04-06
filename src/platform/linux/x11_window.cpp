@@ -71,8 +71,8 @@ bool X11Window::create(const std::string& title, int width, int height)
     XSetWMProtocols(m_display, m_window, &wm_delete, 1);
 
     XSelectInput(m_display, m_window,
-                 ExposureMask     | KeyPressMask       |
-                 ButtonPressMask  | ButtonReleaseMask  |
+                 ExposureMask      | KeyPressMask        | KeyReleaseMask |
+                 ButtonPressMask   | ButtonReleaseMask   |
                  PointerMotionMask | StructureNotifyMask);
 
     // --- GC ---
@@ -100,6 +100,14 @@ bool X11Window::create(const std::string& title, int width, int height)
     m_selTextPx    = allocRGB(m_display, 255, 255, 255);
     m_bottomBgPx   = allocRGB(m_display,  30,  30,  30);
     m_bottomTextPx = allocRGB(m_display, 220, 220, 220);
+    m_fkeyNumBgPx  = allocRGB(m_display,   0,   0,   0);
+    m_fkeyNumFgPx  = allocRGB(m_display, 255, 255,  85);
+    m_fkeyLblBgPx  = allocRGB(m_display,   0, 170, 170);
+    m_fkeyLblFgPx  = allocRGB(m_display,   0,   0,   0);
+    m_modInaBgPx   = allocRGB(m_display,   0,   0, 100);
+    m_modActBgPx   = allocRGB(m_display, 170, 170,   0);
+    m_modActFgPx   = allocRGB(m_display,   0,   0,   0);
+    m_modInaFgPx   = allocRGB(m_display, 200, 200, 200);
 
     // --- Cursors ---
     m_curArrow = XCreateFontCursor(m_display, XC_left_ptr);
@@ -196,14 +204,15 @@ void X11Window::paint()
     GC gc = reinterpret_cast<GC>(m_gc);
     auto* fs = reinterpret_cast<XFontStruct*>(m_fontInfo);
 
-    const int W = m_width;
-    const int H = m_height;
-    auto [topH, leftW] = computeLayout(W, H);
+    const int W    = m_width;
+    const int H    = m_height;
+    const int effH = H - FKEY_H;            // height available above the F-key bar
+    auto [topH, leftW] = computeLayout(W, effH);
 
     // Divider background (fills the gaps between panels)
     XSetForeground(m_display, gc, m_dividerPx);
     XFillRectangle(m_display, m_window, gc,
-                   0, 0, static_cast<unsigned>(W), static_cast<unsigned>(H));
+                   0, 0, static_cast<unsigned>(W), static_cast<unsigned>(effH));
 
     // Directory panels
     if (m_leftPanel)
@@ -212,24 +221,93 @@ void X11Window::paint()
         renderDirectoryPanel(leftW + DIVIDER_W, 0,
                              W - leftW - DIVIDER_W, topH, *m_rightPanel);
 
-    // Bottom panel
+    // Bottom panel (terminal placeholder) — ends at effH, not H
+    int botY = topH + DIVIDER_W;
+    int botH = effH - botY;
     XSetForeground(m_display, gc, m_bottomBgPx);
     XFillRectangle(m_display, m_window, gc,
-                   0, topH + DIVIDER_W,
-                   static_cast<unsigned>(W),
-                   static_cast<unsigned>(H - topH - DIVIDER_W));
+                   0, botY, static_cast<unsigned>(W), static_cast<unsigned>(botH));
 
     const char* bottomLabel = "Terminal";
     int len = static_cast<int>(strlen(bottomLabel));
     int tw  = fs ? XTextWidth(fs, bottomLabel, len) : len * 7;
     int th  = fs ? (fs->ascent + fs->descent) : 13;
     int tx  = (W - tw) / 2;
-    int ty  = topH + DIVIDER_W + (H - topH - DIVIDER_W + th) / 2
-              - (fs ? fs->descent : 2);
+    int ty  = botY + (botH + th) / 2 - (fs ? fs->descent : 2);
     XSetForeground(m_display, gc, m_bottomTextPx);
     XDrawString(m_display, m_window, gc, tx, ty, bottomLabel, len);
 
+    // F-key bar
+    renderFKeyBar();
+
     XFlush(m_display);
+}
+
+void X11Window::renderFKeyBar()
+{
+    GC    gc   = reinterpret_cast<GC>(m_gc);
+    auto* fs   = reinterpret_cast<XFontStruct*>(m_fontInfo);
+    const int barY  = m_height - FKEY_H;
+    const int effW  = m_width - MOD_AREA_W;
+    const int cellW = std::max(1, effW / 10);
+    const int numW  = 16;
+    const int fontAscent  = fs ? fs->ascent  : 11;
+    const int fontDescent = fs ? fs->descent :  2;
+    const int textY = barY + (FKEY_H + fontAscent) / 2 - fontDescent;
+
+    // --- F-key cells ---
+    for (int i = 0; i < 10; ++i)
+    {
+        int x = i * cellW;
+
+        // Number sub-column
+        XSetForeground(m_display, gc, m_fkeyNumBgPx);
+        XFillRectangle(m_display, m_window, gc,
+                       x, barY, static_cast<unsigned>(numW), FKEY_H);
+        XSetForeground(m_display, gc, m_fkeyNumFgPx);
+        std::string numStr = std::to_string(i + 1);
+        int nw = fs ? XTextWidth(fs, numStr.c_str(), static_cast<int>(numStr.size())) : 7;
+        XDrawString(m_display, m_window, gc,
+                    x + (numW - nw) / 2, textY,
+                    numStr.c_str(), static_cast<int>(numStr.size()));
+
+        // Label sub-column
+        const char* lbl    = FKEY_LABELS[i];
+        int         lblLen = static_cast<int>(strlen(lbl));
+        int         lblW   = cellW - numW;
+        if (lbl[0] != '\0')
+        {
+            XSetForeground(m_display, gc, m_fkeyLblBgPx);
+            XFillRectangle(m_display, m_window, gc,
+                           x + numW, barY, static_cast<unsigned>(lblW), FKEY_H);
+            XSetForeground(m_display, gc, m_fkeyLblFgPx);
+            XDrawString(m_display, m_window, gc,
+                        x + numW + 2, textY, lbl, lblLen);
+        }
+        else
+        {
+            XSetForeground(m_display, gc, m_fkeyNumBgPx);
+            XFillRectangle(m_display, m_window, gc,
+                           x + numW, barY, static_cast<unsigned>(lblW), FKEY_H);
+        }
+    }
+
+    // --- Modifier cells ---
+    static const char* MOD_LABELS[3] = { "Alt", "Sft", "Ctl" };
+    for (int i = 0; i < 3; ++i)
+    {
+        int  x      = effW + i * MOD_CELL_W;
+        bool active = modifierActive(static_cast<Mod>(i));
+        XSetForeground(m_display, gc, active ? m_modActBgPx : m_modInaBgPx);
+        XFillRectangle(m_display, m_window, gc,
+                       x, barY, static_cast<unsigned>(MOD_CELL_W), FKEY_H);
+        XSetForeground(m_display, gc, active ? m_modActFgPx : m_modInaFgPx);
+        int mlen = static_cast<int>(strlen(MOD_LABELS[i]));
+        int mw   = fs ? XTextWidth(fs, MOD_LABELS[i], mlen) : mlen * 7;
+        XDrawString(m_display, m_window, gc,
+                    x + (MOD_CELL_W - mw) / 2, textY,
+                    MOD_LABELS[i], mlen);
+    }
 }
 
 // --- Event loop ---
@@ -260,8 +338,31 @@ void X11Window::run()
             {
                 if (event.xbutton.button != Button1) break;
                 const int mx = event.xbutton.x, my = event.xbutton.y;
-                auto hit = hitTest(mx, my, m_width, m_height);
 
+                // F-key bar occupies the bottom FKEY_H rows.
+                if (my >= m_height - FKEY_H)
+                {
+                    const int effW  = m_width - MOD_AREA_W;
+                    const int cellW = std::max(1, effW / 10);
+                    if (mx < effW)
+                    {
+                        int slot = std::min(mx / cellW, 9);
+                        Key key  = static_cast<Key>(static_cast<int>(Key::F1) + slot);
+                        handleKeyDown(key);
+                    }
+                    else
+                    {
+                        int modIdx = (mx - effW) / MOD_CELL_W;
+                        if (modIdx >= 0 && modIdx < 3)
+                        {
+                            toggleModifierSticky(static_cast<Mod>(modIdx));
+                            paint();
+                        }
+                    }
+                    break;
+                }
+
+                auto hit = hitTest(mx, my, m_width, m_height - FKEY_H);
                 if (hit == Hit::HorizDivider)
                     m_drag = Drag::Horiz;
                 else if (hit == Hit::VertDivider)
@@ -282,11 +383,12 @@ void X11Window::run()
 
             case MotionNotify:
             {
-                const int mx = event.xmotion.x, my = event.xmotion.y;
+                const int mx    = event.xmotion.x, my = event.xmotion.y;
+                const int effH  = m_height - FKEY_H;
 
-                if (m_drag == Drag::Horiz && m_height > 0)
+                if (m_drag == Drag::Horiz && effH > 0)
                 {
-                    setHRatio(static_cast<float>(my) / m_height);
+                    setHRatio(static_cast<float>(my) / effH);
                     paint();
                 }
                 else if (m_drag == Drag::Vert && m_width > 0)
@@ -296,7 +398,7 @@ void X11Window::run()
                 }
                 else
                 {
-                    auto hit = hitTest(mx, my, m_width, m_height);
+                    auto hit = hitTest(mx, my, m_width, effH);
                     unsigned long cur = hit == Hit::HorizDivider ? m_curNS :
                                         hit == Hit::VertDivider  ? m_curEW : m_curArrow;
                     XDefineCursor(m_display, m_window, cur);
@@ -315,13 +417,35 @@ void X11Window::run()
                 KeySym ks = XLookupKeysym(&event.xkey, 0);
                 switch (ks)
                 {
-                    case XK_Up:       handleKeyDown(Key::Up);     break;
-                    case XK_Down:     handleKeyDown(Key::Down);   break;
-                    case XK_Return:   handleKeyDown(Key::Return); break;
-                    case XK_Tab:      handleKeyDown(Key::Tab);    break;
-                    case XK_Escape:   handleKeyDown(Key::Escape); break;
-                    case XK_q:        handleKeyDown(Key::Q);      m_running = false; break;
-                    case XK_F10:      handleKeyDown(Key::F10);    break;
+                    case XK_Up:        handleKeyDown(Key::Up);     break;
+                    case XK_Down:      handleKeyDown(Key::Down);   break;
+                    case XK_Return:    handleKeyDown(Key::Return); break;
+                    case XK_Tab:       handleKeyDown(Key::Tab);    break;
+                    case XK_Escape:    handleKeyDown(Key::Escape); break;
+                    case XK_q:         handleKeyDown(Key::Q);      m_running = false; break;
+                    case XK_F10:       handleKeyDown(Key::F10);    break;
+                    case XK_Shift_L:
+                    case XK_Shift_R:   setModifierPhysical(Mod::Shift, true);  paint(); break;
+                    case XK_Control_L:
+                    case XK_Control_R: setModifierPhysical(Mod::Ctrl,  true);  paint(); break;
+                    case XK_Alt_L:
+                    case XK_Alt_R:     setModifierPhysical(Mod::Alt,   true);  paint(); break;
+                    default: break;
+                }
+                break;
+            }
+
+            case KeyRelease:
+            {
+                KeySym ks = XLookupKeysym(&event.xkey, 0);
+                switch (ks)
+                {
+                    case XK_Shift_L:
+                    case XK_Shift_R:   setModifierPhysical(Mod::Shift, false); paint(); break;
+                    case XK_Control_L:
+                    case XK_Control_R: setModifierPhysical(Mod::Ctrl,  false); paint(); break;
+                    case XK_Alt_L:
+                    case XK_Alt_R:     setModifierPhysical(Mod::Alt,   false); paint(); break;
                     default: break;
                 }
                 break;

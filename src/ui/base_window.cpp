@@ -3,6 +3,11 @@
 
 namespace uc {
 
+// Only F10 is implemented; all other slots are blank.
+const char* const BaseWindow::FKEY_LABELS[10] = {
+    "", "", "", "", "", "", "", "", "", "Quit"
+};
+
 std::string BaseWindow::stateSnapshot() const
 {
     const bool leftFocused = m_leftPanel && m_leftPanel->hasFocus();
@@ -15,7 +20,10 @@ std::string BaseWindow::stateSnapshot() const
        << " leftEntries="   << serializeEntries(m_leftPanel.get())
        << " rightEntries="  << serializeEntries(m_rightPanel.get())
        << " hRatio="        << m_hRatio
-       << " vRatio="        << m_vRatio;
+       << " vRatio="        << m_vRatio
+       << " modAlt="        << (m_modSticky[0] ? 1 : 0)
+       << " modShift="      << (m_modSticky[1] ? 1 : 0)
+       << " modCtrl="       << (m_modSticky[2] ? 1 : 0);
     return ss.str();
 }
 

@@ -20,13 +20,14 @@ public:
     void run()              override;
     void close()            override;
     void invalidate()       override;
-    bool confirmQuit()      override;
+    bool confirmQuit()           override;
     void scheduleKeyDown(Key key) override;
 
 private:
     void paint();
     void renderDirectoryPanel(int rx, int ry, int rw, int rh,
                               uc::DirectoryPanel& panel);
+    void renderFKeyBar();
 
     _XDisplay*    m_display  { nullptr };
     unsigned long m_window   { 0 };       // X11 Window  = unsigned long
@@ -48,6 +49,16 @@ private:
     unsigned long m_selTextPx    { 0 };
     unsigned long m_bottomBgPx   { 0 };
     unsigned long m_bottomTextPx { 0 };
+
+    // F-key bar colors
+    unsigned long m_fkeyNumBgPx  { 0 };
+    unsigned long m_fkeyNumFgPx  { 0 };
+    unsigned long m_fkeyLblBgPx  { 0 };
+    unsigned long m_fkeyLblFgPx  { 0 };
+    unsigned long m_modInaBgPx   { 0 };
+    unsigned long m_modActBgPx   { 0 };
+    unsigned long m_modActFgPx   { 0 };
+    unsigned long m_modInaFgPx   { 0 };
 
     // Cursors (X11 Cursor = unsigned long)
     unsigned long m_curArrow    { 0 };

@@ -34,6 +34,21 @@ build\Debug\unicommander.exe
 | Tab | Switch focus between left and right panel |
 | F10 | Quit (confirmation dialog) |
 
+## F-key bar
+
+A Far Manager-style function key bar is displayed at the bottom of the window.
+Each of the 10 cells shows the key number and, for implemented keys, its action.
+Clicking a cell fires the same action as pressing the corresponding F-key.
+
+## Modifier key indicators
+
+Three cells (Alt / Sft / Ctl) are shown to the right of the F-key bar.
+- Pressing a modifier key highlights its cell while held.
+- Clicking a cell toggles its **sticky** state (stays active until clicked again).
+
+Sticky mode is useful in remote desktop sessions where modifier keys may not
+pass through reliably.
+
 ## Testing
 
 The test suite drives the app as a subprocess via a stdin/stdout text protocol.
