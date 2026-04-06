@@ -11,7 +11,7 @@ DirectoryPanel::DirectoryPanel(const std::string& path)
     setPath(path.empty() ? fs::current_path().string() : path);
 }
 
-void DirectoryPanel::setPath(const std::string& path)
+void DirectoryPanel::setPath(const std::string& path, const std::string& selectName)
 {
     std::error_code ec;
     fs::path p = fs::canonical(fs::path(path), ec);
@@ -20,6 +20,17 @@ void DirectoryPanel::setPath(const std::string& path)
     m_selectedIndex = 0;
     m_scrollOffset  = 0;
     refresh();
+    if (!selectName.empty())
+    {
+        for (int i = 0; i < (int)m_entries.size(); ++i)
+        {
+            if (m_entries[i].name == selectName)
+            {
+                m_selectedIndex = i;
+                break;
+            }
+        }
+    }
 }
 
 void DirectoryPanel::resetPanel(const std::string& path, bool focused)
@@ -87,7 +98,7 @@ void DirectoryPanel::activate()
     if (m_entries.empty()) return;
     const Entry& sel = m_entries[m_selectedIndex];
     if (sel.name == "..")
-        setPath(m_path.parent_path().string());
+        setPath(m_path.parent_path().string(), m_path.filename().string());
     else if (sel.isDir)
         setPath((m_path / sel.name).string());
     // regular files: no action yet

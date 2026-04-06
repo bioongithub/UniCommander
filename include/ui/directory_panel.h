@@ -20,7 +20,7 @@ public:
     bool      hasFocus() const override { return m_hasFocus; }
     void      setFocus(bool focused) override { m_hasFocus = focused; }
 
-    void        setPath(const std::string& path);
+    void        setPath(const std::string& path, const std::string& selectName = "");
     void        resetPanel(const std::string& path, bool focused);
     std::string getPath() const;
     void        refresh();

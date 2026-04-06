@@ -47,6 +47,28 @@ class ActivationTests(TestCase):
         self.app.send("keydown return")
         self.assertState({"leftPath": original_path})
 
+    def test_enter_dotdot_selects_previous_dir(self):
+        s = self.app.state()
+        entries = s["leftEntries"].split(",")
+        dir_entry = next((e for e in entries if e.endswith("/") and e != "../"), None)
+        assert dir_entry is not None, "No subdirectory available to enter"
+
+        dir_name = dir_entry.rstrip("/")
+        original_idx = entries.index(dir_entry)
+
+        # Navigate into the subdirectory
+        for _ in range(original_idx):
+            self.app.send("keydown down")
+        self.app.send("keydown return")
+
+        # Go back up via '..'
+        self.app.send("keydown return")
+
+        self.assertState({
+            "leftPath":     s["leftPath"],
+            "leftSelected": str(original_idx),
+        })
+
     def test_enter_on_file_does_not_change_path(self):
         s = self.app.state()
         entries = s["leftEntries"].split(",")
