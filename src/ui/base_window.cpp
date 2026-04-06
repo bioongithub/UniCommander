@@ -3,9 +3,13 @@
 
 namespace uc {
 
-// Only F10 is implemented; all other slots are blank.
-const char* const BaseWindow::FKEY_LABELS[10] = {
-    "", "", "", "", "", "", "", "", "", "Quit"
+// Row 0 = Normal, 1 = Shift, 2 = Ctrl, 3 = Alt.
+// Only F10 Normal (Quit) is implemented; all other combinations are blank.
+const char* const BaseWindow::FKEY_LABELS[4][10] = {
+    { "",  "",  "",  "",  "",  "",  "",  "",  "", "Quit" },  // Normal
+    { "",  "",  "",  "",  "",  "",  "",  "",  "",  ""    },  // Shift
+    { "",  "",  "",  "",  "",  "",  "",  "",  "",  ""    },  // Ctrl
+    { "",  "",  "",  "",  "",  "",  "",  "",  "",  ""    },  // Alt
 };
 
 std::string BaseWindow::stateSnapshot() const

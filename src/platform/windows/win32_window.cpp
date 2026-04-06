@@ -251,7 +251,7 @@ void Win32Window::renderFKeyBar(HDC hdc, int W, int H)
 
         // Label sub-column
         RECT lblR = { x + numW, barY, x + cellW, H };
-        const char* lbl = FKEY_LABELS[i];
+        const char* lbl = FKEY_LABELS[activeModifierRow()][i];
         if (lbl[0] != '\0')
         {
             // Implemented: cyan bg, black text

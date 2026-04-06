@@ -186,7 +186,7 @@ using Hit = uc::BaseWindow::Hit;
         // Label sub-column
         CGFloat lblW = cellW - numW;
         NSRect  lblR = NSMakeRect(x + numW, bar.origin.y, lblW, FKEY_H);
-        const char* lbl = uc::BaseWindow::FKEY_LABELS[i];
+        const char* lbl = uc::BaseWindow::FKEY_LABELS[_owner->activeModifierRow()][i];
         if (lbl[0] != '\0')
         {
             [[NSColor colorWithRed:0.0 green:0.67 blue:0.67 alpha:1.0] set];

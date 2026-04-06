@@ -272,7 +272,7 @@ void X11Window::renderFKeyBar()
                     numStr.c_str(), static_cast<int>(numStr.size()));
 
         // Label sub-column
-        const char* lbl    = FKEY_LABELS[i];
+        const char* lbl    = FKEY_LABELS[activeModifierRow()][i];
         int         lblLen = static_cast<int>(strlen(lbl));
         int         lblW   = cellW - numW;
         if (lbl[0] != '\0')

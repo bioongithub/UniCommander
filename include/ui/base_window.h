@@ -20,8 +20,20 @@ public:
     static constexpr int MOD_CELL_W  = 30;  // width of each modifier indicator cell
     static constexpr int MOD_AREA_W  = MOD_CELL_W * 3;
 
-    // Labels for F1-F10 slots; empty string = not yet implemented.
-    static const char* const FKEY_LABELS[10];
+    // Labels for F1-F10 slots per modifier row.
+    // Row 0 = Normal, 1 = Shift, 2 = Ctrl, 3 = Alt.
+    // Empty string means not yet implemented for that combination.
+    static const char* const FKEY_LABELS[4][10];
+
+    // Returns the label row index matching the highest-priority active modifier.
+    // Priority: Alt(3) > Ctrl(2) > Shift(1) > Normal(0) — Far Manager convention.
+    int activeModifierRow() const
+    {
+        if (modifierActive(Mod::Alt))   return 3;
+        if (modifierActive(Mod::Ctrl))  return 2;
+        if (modifierActive(Mod::Shift)) return 1;
+        return 0;
+    }
 
     // --- Modifier key indicators ---
     enum class Mod { Alt = 0, Shift = 1, Ctrl = 2 };
