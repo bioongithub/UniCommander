@@ -240,6 +240,9 @@ void X11Window::paint()
     // F-key bar
     renderFKeyBar();
 
+    // Help overlay (drawn last, on top of everything)
+    if (helpWindow().isVisible()) renderHelpWindow();
+
     XFlush(m_display);
 }
 
@@ -308,6 +311,51 @@ void X11Window::renderFKeyBar()
                     x + (MOD_CELL_W - mw) / 2, textY,
                     MOD_LABELS[i], mlen);
     }
+}
+
+void X11Window::renderHelpWindow()
+{
+    GC    gc = reinterpret_cast<GC>(m_gc);
+    auto* fs = reinterpret_cast<XFontStruct*>(m_fontInfo);
+    const int fontAscent  = fs ? fs->ascent  : 11;
+    const int fontDescent = fs ? fs->descent :  2;
+
+    auto box = uc::HelpWindow::computeBox(m_width, m_height);
+
+    // Background
+    unsigned long bgPx = allocRGB(m_display, 20, 20, 50);
+    XSetForeground(m_display, gc, bgPx);
+    XFillRectangle(m_display, m_window, gc,
+                   box.x, box.y,
+                   static_cast<unsigned>(box.w), static_cast<unsigned>(box.h));
+
+    // Border
+    unsigned long borderPx = allocRGB(m_display, 100, 180, 255);
+    XSetForeground(m_display, gc, borderPx);
+    XDrawRectangle(m_display, m_window, gc,
+                   box.x, box.y,
+                   static_cast<unsigned>(box.w - 1), static_cast<unsigned>(box.h - 1));
+
+    // Text lines
+    unsigned long titlePx = borderPx;
+    unsigned long textPx  = allocRGB(m_display, 220, 220, 220);
+    int y = box.y + uc::HelpWindow::PADDING + fontAscent;
+
+    for (int i = 0; uc::HelpWindow::LINES[i]; ++i)
+    {
+        const char* line = uc::HelpWindow::LINES[i];
+        int len = static_cast<int>(strlen(line));
+        if (len > 0)
+        {
+            XSetForeground(m_display, gc, i == 0 ? titlePx : textPx);
+            XDrawString(m_display, m_window, gc,
+                        box.x + uc::HelpWindow::PADDING, y, line, len);
+        }
+        y += uc::HelpWindow::LINE_H;
+    }
+
+    // Restore a neutral foreground so subsequent callers are unaffected
+    XSetForeground(m_display, gc, m_fileTextPx);
 }
 
 // --- Event loop ---
@@ -417,6 +465,7 @@ void X11Window::run()
                 KeySym ks = XLookupKeysym(&event.xkey, 0);
                 switch (ks)
                 {
+                    case XK_F1:        handleKeyDown(Key::F1);     break;
                     case XK_Up:        handleKeyDown(Key::Up);     break;
                     case XK_Down:      handleKeyDown(Key::Down);   break;
                     case XK_Return:    handleKeyDown(Key::Return); break;

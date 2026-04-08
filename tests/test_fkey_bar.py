@@ -32,15 +32,16 @@ class FKeyBarTests(TestCase):
             driver.proc.kill()
             raise
 
-    def test_fkeyclick_1_through_9_are_noop(self):
+    def test_fkeyclick_2_through_9_are_noop(self):
+        # F1 opens help (tested in test_help.py); F2-F9 have no action yet.
         before = self.app.state()
-        for n in range(1, 10):
+        for n in range(2, 10):
             self.app.send(f"fkeyclick {n}")
         after = self.app.state()
         for key in ("focus", "leftSelected", "rightSelected",
                     "leftPath", "rightPath"):
             assert after[key] == before[key], \
-                f"{key} changed after F1-F9 clicks: {before[key]!r} -> {after[key]!r}"
+                f"{key} changed after F2-F9 clicks: {before[key]!r} -> {after[key]!r}"
 
 
 if __name__ == "__main__":

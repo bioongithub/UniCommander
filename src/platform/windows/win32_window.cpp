@@ -223,6 +223,9 @@ void Win32Window::paint(HDC hdc)
 
     // --- F-key bar ---
     renderFKeyBar(hdc, W, H);
+
+    // --- Help overlay (drawn last, on top of everything) ---
+    if (helpWindow().isVisible()) renderHelpWindow(hdc, W, H);
 }
 
 void Win32Window::renderFKeyBar(HDC hdc, int W, int H)
@@ -284,6 +287,41 @@ void Win32Window::renderFKeyBar(HDC hdc, int W, int H)
         SetTextColor(hdc, active ? RGB(0, 0, 0) : RGB(200, 200, 200));
         DrawTextA(hdc, MOD_LABELS[i], -1, &modR,
                   DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    }
+}
+
+void Win32Window::renderHelpWindow(HDC hdc, int W, int H)
+{
+    auto box = uc::HelpWindow::computeBox(W, H);
+
+    // Background
+    RECT boxR = { box.x, box.y, box.x + box.w, box.y + box.h };
+    HBRUSH bgBrush = CreateSolidBrush(RGB(20, 20, 50));
+    FillRect(hdc, &boxR, bgBrush);
+    DeleteObject(bgBrush);
+
+    // Border
+    HPEN   borderPen  = CreatePen(PS_SOLID, 2, RGB(100, 180, 255));
+    HPEN   oldPen     = (HPEN)  SelectObject(hdc, borderPen);
+    HBRUSH oldBrush   = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+    Rectangle(hdc, box.x, box.y, box.x + box.w, box.y + box.h);
+    SelectObject(hdc, oldPen);
+    SelectObject(hdc, oldBrush);
+    DeleteObject(borderPen);
+
+    // Text lines
+    SetBkMode(hdc, TRANSPARENT);
+    int y = box.y + uc::HelpWindow::PADDING;
+    for (int i = 0; uc::HelpWindow::LINES[i]; ++i)
+    {
+        const char* line = uc::HelpWindow::LINES[i];
+        // Title row (index 0) in blue; all others in light gray
+        SetTextColor(hdc, i == 0 ? RGB(100, 180, 255) : RGB(220, 220, 220));
+        RECT textR = { box.x + uc::HelpWindow::PADDING, y,
+                       box.x + box.w - uc::HelpWindow::PADDING,
+                       y + uc::HelpWindow::LINE_H };
+        DrawTextA(hdc, line, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        y += uc::HelpWindow::LINE_H;
     }
 }
 
@@ -358,6 +396,7 @@ LRESULT CALLBACK Win32Window::wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             using Key = uc::BaseWindow::Key;
             switch (wp)
             {
+                case VK_F1:      self->handleKeyDown(Key::F1);     return 0;
                 case VK_UP:      self->handleKeyDown(Key::Up);     return 0;
                 case VK_DOWN:    self->handleKeyDown(Key::Down);   return 0;
                 case VK_RETURN:  self->handleKeyDown(Key::Return); return 0;

@@ -23,6 +23,7 @@ private:
     void paint(HDC hdc);
     void renderDirectoryPanel(HDC hdc, RECT rect, uc::DirectoryPanel& panel);
     void renderFKeyBar(HDC hdc, int W, int H);
+    void renderHelpWindow(HDC hdc, int W, int H);
 
     HWND      m_hwnd      { nullptr };
     HINSTANCE m_hinstance { nullptr };

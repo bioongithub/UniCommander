@@ -9,6 +9,7 @@ set(SOURCES
     src/main.cpp
     src/ui/base_window.cpp
     src/ui/directory_panel.cpp
+    src/ui/help_window.cpp
     src/test_runner.cpp
 )
 

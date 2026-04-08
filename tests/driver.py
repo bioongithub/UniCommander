@@ -51,6 +51,7 @@ class TestDriver:
         assert state.get("modAlt")        == "0",                 f"reset: modAlt={state.get('modAlt')!r}"
         assert state.get("modShift")      == "0",                 f"reset: modShift={state.get('modShift')!r}"
         assert state.get("modCtrl")       == "0",                 f"reset: modCtrl={state.get('modCtrl')!r}"
+        assert state.get("helpVisible")   == "0",                 f"reset: helpVisible={state.get('helpVisible')!r}"
 
     def dialog(self, answer):
         """Pre-arm the next confirmation dialog. answer: 'yes' or 'no'."""
@@ -138,6 +139,7 @@ def _run_all(executable):
     from test_right_panel import RightPanelTests
     from test_fkey_bar import FKeyBarTests
     from test_modifiers import ModifierTests
+    from test_help import HelpTests
 
     suites = [
         InitialStateTests,
@@ -147,6 +149,7 @@ def _run_all(executable):
         RightPanelTests,
         FKeyBarTests,
         ModifierTests,
+        HelpTests,
     ]
 
     app = TestDriver(executable, _TESTS_DIR)

@@ -154,6 +154,10 @@ using Hit = uc::BaseWindow::Hit;
 
     // F-key bar
     [self renderFKeyBar:NSMakeRect(0, effH, W, FKEY_H)];
+
+    // Help overlay (drawn last, on top of everything)
+    if (_owner->helpWindow().isVisible())
+        [self renderHelpWindow:self.bounds];
 }
 
 - (void)renderFKeyBar:(NSRect)bar
@@ -227,6 +231,44 @@ using Hit = uc::BaseWindow::Hit;
     }
 }
 
+- (void)renderHelpWindow:(NSRect)bounds
+{
+    auto box = uc::HelpWindow::computeBox(static_cast<int>(NSWidth(bounds)),
+                                          static_cast<int>(NSHeight(bounds)));
+    NSRect boxR = NSMakeRect(box.x, box.y, box.w, box.h);
+
+    // Background
+    [[NSColor colorWithRed:0.08 green:0.08 blue:0.20 alpha:1.0] set];
+    NSRectFill(boxR);
+
+    // Border
+    [[NSColor colorWithRed:0.39 green:0.71 blue:1.0 alpha:1.0] set];
+    NSFrameRectWithWidth(boxR, 2.0);
+
+    // Text lines
+    NSFont* font = [NSFont userFixedPitchFontOfSize:12.0];
+    CGFloat fontH = font.ascender - font.descender;
+    CGFloat y = box.y + uc::HelpWindow::PADDING;
+
+    for (int i = 0; uc::HelpWindow::LINES[i]; ++i)
+    {
+        NSColor* col = (i == 0)
+            ? [NSColor colorWithRed:0.39 green:0.71 blue:1.0 alpha:1.0]
+            : [NSColor colorWithWhite:0.86 alpha:1.0];
+        NSDictionary* attrs = @{
+            NSForegroundColorAttributeName: col,
+            NSFontAttributeName:            font
+        };
+        NSString* line = [NSString stringWithUTF8String:uc::HelpWindow::LINES[i]];
+        // Adjust baseline: drawAtPoint uses the font baseline, not the top
+        [line drawAtPoint:NSMakePoint(box.x + uc::HelpWindow::PADDING,
+                                      y + (uc::HelpWindow::LINE_H - fontH) / 2.0
+                                        - font.descender)
+           withAttributes:attrs];
+        y += uc::HelpWindow::LINE_H;
+    }
+}
+
 // --- Cursor rects ---
 - (void)resetCursorRects
 {
@@ -254,6 +296,7 @@ using Hit = uc::BaseWindow::Hit;
     using Key = uc::BaseWindow::Key;
     switch (event.keyCode)
     {
+        case 122: _owner->handleKeyDown(Key::F1);     break;  // F1
         case 126: _owner->handleKeyDown(Key::Up);     break;  // arrow up
         case 125: _owner->handleKeyDown(Key::Down);   break;  // arrow down
         case 36:  _owner->handleKeyDown(Key::Return); break;  // return

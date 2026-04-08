@@ -28,6 +28,7 @@ private:
     void renderDirectoryPanel(int rx, int ry, int rw, int rh,
                               uc::DirectoryPanel& panel);
     void renderFKeyBar();
+    void renderHelpWindow();
 
     _XDisplay*    m_display  { nullptr };
     unsigned long m_window   { 0 };       // X11 Window  = unsigned long

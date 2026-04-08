@@ -6,7 +6,7 @@ namespace uc {
 // Row 0 = Normal, 1 = Shift, 2 = Ctrl, 3 = Alt.
 // Only F10 Normal (Quit) is implemented; all other combinations are blank.
 const char* const BaseWindow::FKEY_LABELS[4][10] = {
-    { "",  "",  "",  "",  "",  "",  "",  "",  "", "Quit" },  // Normal
+    { "Help", "",  "",  "",  "",  "",  "",  "",  "", "Quit" },  // Normal
     { "",  "",  "",  "",  "",  "",  "",  "",  "",  ""    },  // Shift
     { "",  "",  "",  "",  "",  "",  "",  "",  "",  ""    },  // Ctrl
     { "",  "",  "",  "",  "",  "",  "",  "",  "",  ""    },  // Alt
@@ -27,7 +27,8 @@ std::string BaseWindow::stateSnapshot() const
        << " vRatio="        << m_vRatio
        << " modAlt="        << (m_modSticky[0] ? 1 : 0)
        << " modShift="      << (m_modSticky[1] ? 1 : 0)
-       << " modCtrl="       << (m_modSticky[2] ? 1 : 0);
+       << " modCtrl="       << (m_modSticky[2] ? 1 : 0)
+       << " helpVisible="   << (m_helpWindow.isVisible() ? 1 : 0);
     return ss.str();
 }
 
@@ -48,6 +49,15 @@ void BaseWindow::handleKeyDown(Key key)
 {
     switch (key)
     {
+        case Key::F1:
+            m_helpWindow.toggle();
+            invalidate();
+            break;
+
+        case Key::Escape:
+            if (m_helpWindow.isVisible()) { m_helpWindow.close(); invalidate(); }
+            break;
+
         case Key::Tab:
             switchFocus();
             invalidate();

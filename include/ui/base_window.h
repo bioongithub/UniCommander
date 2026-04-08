@@ -1,6 +1,7 @@
 #pragma once
 #include "ui/window.h"
 #include "ui/directory_panel.h"
+#include "ui/help_window.h"
 #include <algorithm>
 #include <atomic>
 #include <memory>
@@ -91,6 +92,10 @@ public:
     void  setHRatio(float v) { m_hRatio = clamp(v); }
     void  setVRatio(float v) { m_vRatio = clamp(v); }
 
+    // --- Help overlay ---
+    HelpWindow&       helpWindow()       { return m_helpWindow; }
+    const HelpWindow& helpWindow() const { return m_helpWindow; }
+
     // --- Panel access ---
     DirectoryPanel* leftPanel()  const { return m_leftPanel.get(); }
     DirectoryPanel* rightPanel() const { return m_rightPanel.get(); }
@@ -139,6 +144,7 @@ public:
         m_drag   = Drag::Idle;
         m_modSticky[0]   = m_modSticky[1]   = m_modSticky[2]   = false;
         m_modPhysical[0] = m_modPhysical[1] = m_modPhysical[2] = false;
+        m_helpWindow.reset();
         if (m_leftPanel)  m_leftPanel->resetPanel(dir, true);
         if (m_rightPanel) m_rightPanel->resetPanel(dir, false);
         invalidate();
@@ -163,6 +169,8 @@ protected:
 
     bool m_modSticky[3]   {};   // toggled by clicking the modifier cell
     bool m_modPhysical[3] {};   // true while the physical key is held
+
+    HelpWindow m_helpWindow;
 
     std::unique_ptr<DirectoryPanel> m_leftPanel;
     std::unique_ptr<DirectoryPanel> m_rightPanel;

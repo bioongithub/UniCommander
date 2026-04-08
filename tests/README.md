@@ -75,6 +75,7 @@ Fields are space-separated `key=value` pairs. All fields are always present.
 | `modAlt` | `0` \| `1` | Sticky Alt modifier state |
 | `modShift` | `0` \| `1` | Sticky Shift modifier state |
 | `modCtrl` | `0` \| `1` | Sticky Ctrl modifier state |
+| `helpVisible` | `0` \| `1` | Whether the F1 help overlay is currently shown |
 
 ### Error responses
 
