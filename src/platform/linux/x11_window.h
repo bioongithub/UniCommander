@@ -20,19 +20,12 @@ public:
     void run()              override;
     void close()            override;
     void invalidate()       override;
-    bool confirmQuit()                                           override;
-    bool confirmCopy(const std::string& srcName,
-                     const std::string& dstPath)                override;
     void scheduleKeyDown(Key key)                               override;
+    void pumpEventsUntil(std::function<bool()> done)            override;
 
 private:
     void paint();
-    void renderDirectoryPanel(int rx, int ry, int rw, int rh,
-                              uc::DirectoryPanel& panel);
-    void renderFKeyBar();
-    void renderHelpWindow();
-    // Generic Yes/No dialog drawn into the window; returns true if Yes chosen.
-    bool showYesNoDialog(const std::string& line1, const std::string& line2);
+    void processEvent(XEvent& event);   // shared by run() and pumpEventsUntil()
 
     _XDisplay*    m_display  { nullptr };
     unsigned long m_window   { 0 };       // X11 Window  = unsigned long
@@ -40,38 +33,15 @@ private:
     _XFontStruct* m_fontInfo { nullptr };
     bool          m_running  { false };
 
-    // Pixel values for drawing (allocated at create time)
-    unsigned long m_dividerPx    { 0 };
-    unsigned long m_panelBgPx    { 0 };
-    unsigned long m_headerBgPx   { 0 };
-    unsigned long m_headerTextPx { 0 };
-    unsigned long m_borderFocPx  { 0 };
-    unsigned long m_borderUnfPx  { 0 };
-    unsigned long m_selFocPx     { 0 };
-    unsigned long m_selUnfPx     { 0 };
-    unsigned long m_dirTextPx    { 0 };
-    unsigned long m_fileTextPx   { 0 };
-    unsigned long m_selTextPx    { 0 };
-    unsigned long m_bottomBgPx   { 0 };
-    unsigned long m_bottomTextPx { 0 };
-
-    // F-key bar colors
-    unsigned long m_fkeyNumBgPx  { 0 };
-    unsigned long m_fkeyNumFgPx  { 0 };
-    unsigned long m_fkeyLblBgPx  { 0 };
-    unsigned long m_fkeyLblFgPx  { 0 };
-    unsigned long m_modInaBgPx   { 0 };
-    unsigned long m_modActBgPx   { 0 };
-    unsigned long m_modActFgPx   { 0 };
-    unsigned long m_modInaFgPx   { 0 };
-
     // Cursors (X11 Cursor = unsigned long)
     unsigned long m_curArrow    { 0 };
     unsigned long m_curNS       { 0 };
     unsigned long m_curEW       { 0 };
 
-    // Atom for test-thread key dispatch (client message UC_KEY_DOWN)
-    unsigned long m_atomKeyDown { 0 };
+    // Atoms
+    unsigned long m_atomKeyDown    { 0 };  // UC_KEY_DOWN (test-thread dispatch)
+    unsigned long m_atomWmDelete   { 0 };  // WM_DELETE_WINDOW
+    unsigned long m_atomWmProtocols{ 0 };  // WM_PROTOCOLS
 
     // Synchronise scheduleKeyDown(): test thread blocks until the main thread
     // finishes handling the key (mirrors Win32 SendMessage synchronous semantics).

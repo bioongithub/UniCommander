@@ -7,9 +7,16 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(SOURCES
     src/main.cpp
+    src/ui/widget.cpp
+    src/ui/modal_widget.cpp
+    src/ui/message_loop.cpp
+    src/ui/help_widget.cpp
+    src/ui/confirm_widget.cpp
+    src/ui/directory_panel_widget.cpp
+    src/ui/fkey_bar_widget.cpp
+    src/ui/terminal_panel_widget.cpp
     src/ui/base_window.cpp
     src/ui/directory_panel.cpp
-    src/ui/help_window.cpp
     src/test_runner.cpp
 )
 
@@ -17,6 +24,7 @@ set(SOURCES
 if(WIN32)
     list(APPEND SOURCES
         src/platform/windows/win32_window.cpp
+        src/platform/windows/win32_render_context.cpp
     )
     add_executable(unicommander WIN32 ${SOURCES})
     # WIN32 subsystem but keep standard main() as entry point
@@ -29,6 +37,7 @@ elseif(APPLE)
     enable_language(OBJCXX)
     list(APPEND SOURCES
         src/platform/macos/cocoa_window.mm
+        src/platform/macos/cocoa_render_context.mm
     )
     add_executable(unicommander ${SOURCES})
     find_library(COCOA_LIBRARY Cocoa REQUIRED)
@@ -37,6 +46,7 @@ elseif(APPLE)
 elseif(UNIX)
     list(APPEND SOURCES
         src/platform/linux/x11_window.cpp
+        src/platform/linux/x11_render_context.cpp
     )
     add_executable(unicommander ${SOURCES})
     find_package(X11 REQUIRED)

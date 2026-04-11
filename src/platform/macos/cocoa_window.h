@@ -18,12 +18,11 @@ public:
     ~CocoaWindow() override;
 
     bool create(const std::string& title, int width, int height) override;
-    void show()        override;
-    void run()         override;
-    void close()       override;
-    void invalidate()  override;
-    bool confirmQuit() override;
-    bool confirmCopy(const std::string& srcName, const std::string& dstPath) override;
+    void show()       override;
+    void run()        override;
+    void close()      override;
+    void invalidate() override;
+    void pumpEventsUntil(std::function<bool()> done) override;
 
 private:
     NSWindow*         m_window      { nullptr };

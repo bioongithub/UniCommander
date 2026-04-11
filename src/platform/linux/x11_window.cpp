@@ -1,4 +1,5 @@
 #include "x11_window.h"
+#include "x11_render_context.h"
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
@@ -8,21 +9,6 @@
 #include <filesystem>
 
 using Hit = uc::BaseWindow::Hit;
-
-static constexpr int ROW_H    = 18;
-static constexpr int HEADER_H = 20;
-
-// --- Helpers ---
-static unsigned long allocRGB(Display* dpy, int r, int g, int b)
-{
-    XColor c = {};
-    c.red    = static_cast<unsigned short>(r * 257);
-    c.green  = static_cast<unsigned short>(g * 257);
-    c.blue   = static_cast<unsigned short>(b * 257);
-    c.flags  = DoRed | DoGreen | DoBlue;
-    XAllocColor(dpy, DefaultColormap(dpy, DefaultScreen(dpy)), &c);
-    return c.pixel;
-}
 
 // --- Lifecycle ---
 X11Window::X11Window()  = default;
@@ -86,36 +72,15 @@ bool X11Window::create(const std::string& title, int width, int height)
     if (fs)
         XSetFont(m_display, reinterpret_cast<GC>(m_gc), fs->fid);
 
-    // --- Colors ---
-    m_dividerPx    = allocRGB(m_display,  80,  80,  80);
-    m_panelBgPx    = allocRGB(m_display,  20,  20,  20);
-    m_headerBgPx   = allocRGB(m_display,  40,  40,  60);
-    m_headerTextPx = allocRGB(m_display, 180, 180, 255);
-    m_borderFocPx  = allocRGB(m_display,   0, 120, 215);
-    m_borderUnfPx  = allocRGB(m_display,  80,  80,  80);
-    m_selFocPx     = allocRGB(m_display,   0,  80, 160);
-    m_selUnfPx     = allocRGB(m_display,  55,  55,  55);
-    m_dirTextPx    = allocRGB(m_display, 100, 180, 255);
-    m_fileTextPx   = allocRGB(m_display, 220, 220, 220);
-    m_selTextPx    = allocRGB(m_display, 255, 255, 255);
-    m_bottomBgPx   = allocRGB(m_display,  30,  30,  30);
-    m_bottomTextPx = allocRGB(m_display, 220, 220, 220);
-    m_fkeyNumBgPx  = allocRGB(m_display,   0,   0,   0);
-    m_fkeyNumFgPx  = allocRGB(m_display, 255, 255,  85);
-    m_fkeyLblBgPx  = allocRGB(m_display,   0, 170, 170);
-    m_fkeyLblFgPx  = allocRGB(m_display,   0,   0,   0);
-    m_modInaBgPx   = allocRGB(m_display,   0,   0, 100);
-    m_modActBgPx   = allocRGB(m_display, 170, 170,   0);
-    m_modActFgPx   = allocRGB(m_display,   0,   0,   0);
-    m_modInaFgPx   = allocRGB(m_display, 200, 200, 200);
-
     // --- Cursors ---
     m_curArrow = XCreateFontCursor(m_display, XC_left_ptr);
     m_curNS    = XCreateFontCursor(m_display, XC_sb_v_double_arrow);
     m_curEW    = XCreateFontCursor(m_display, XC_sb_h_double_arrow);
     XDefineCursor(m_display, m_window, m_curArrow);
 
-    m_atomKeyDown = XInternAtom(m_display, "UC_KEY_DOWN", False);
+    m_atomKeyDown     = XInternAtom(m_display, "UC_KEY_DOWN",      False);
+    m_atomWmDelete    = XInternAtom(m_display, "WM_DELETE_WINDOW", False);
+    m_atomWmProtocols = XInternAtom(m_display, "WM_PROTOCOLS",     False);
 
     initPanels(std::filesystem::current_path().string());
 
@@ -129,410 +94,235 @@ void X11Window::show()
 }
 
 // --- Painting ---
-void X11Window::renderDirectoryPanel(int rx, int ry, int rw, int rh,
-                                     uc::DirectoryPanel& panel)
-{
-    GC gc = reinterpret_cast<GC>(m_gc);
-    auto* fs = reinterpret_cast<XFontStruct*>(m_fontInfo);
-    const int fontAscent  = fs ? fs->ascent  : 11;
-    const int fontDescent = fs ? fs->descent :  2;
-
-    const int visibleRows = std::max(0, (rh - HEADER_H - 2) / ROW_H);
-    panel.ensureVisible(visibleRows);
-
-    // Background
-    XSetForeground(m_display, gc, m_panelBgPx);
-    XFillRectangle(m_display, m_window, gc,
-                   rx, ry, static_cast<unsigned>(rw), static_cast<unsigned>(rh));
-
-    // Border
-    XSetForeground(m_display, gc, panel.hasFocus() ? m_borderFocPx : m_borderUnfPx);
-    XDrawRectangle(m_display, m_window, gc,
-                   rx, ry, static_cast<unsigned>(rw - 1), static_cast<unsigned>(rh - 1));
-
-    // Header background
-    XSetForeground(m_display, gc, m_headerBgPx);
-    XFillRectangle(m_display, m_window, gc,
-                   rx + 1, ry + 1, static_cast<unsigned>(rw - 2), HEADER_H);
-
-    // Header path text
-    XSetForeground(m_display, gc, m_headerTextPx);
-    std::string path = panel.getPath();
-    int headerTextY  = ry + 1 + (HEADER_H + fontAscent) / 2 - fontDescent;
-    XDrawString(m_display, m_window, gc,
-                rx + 4, headerTextY, path.c_str(), static_cast<int>(path.size()));
-
-    // Entry rows
-    const auto& entries    = panel.entries();
-    const int   scrollOff  = panel.scrollOffset();
-    const int   selectedIdx = panel.selectedIndex();
-    int y = ry + 1 + HEADER_H;
-
-    for (int i = scrollOff;
-         i < static_cast<int>(entries.size()) && y + ROW_H <= ry + rh - 1;
-         ++i, y += ROW_H)
-    {
-        bool selected = (i == selectedIdx);
-
-        if (selected)
-        {
-            XSetForeground(m_display, gc,
-                           panel.hasFocus() ? m_selFocPx : m_selUnfPx);
-            XFillRectangle(m_display, m_window, gc,
-                           rx + 1, y, static_cast<unsigned>(rw - 2), ROW_H);
-        }
-
-        const auto& entry = entries[i];
-        if (selected)
-            XSetForeground(m_display, gc, m_selTextPx);
-        else if (entry.isDir)
-            XSetForeground(m_display, gc, m_dirTextPx);
-        else
-            XSetForeground(m_display, gc, m_fileTextPx);
-
-        std::string label = (entry.isDir && entry.name != "..")
-            ? "[" + entry.name + "]" : entry.name;
-        int entryTextY = y + (ROW_H + fontAscent) / 2 - fontDescent;
-        XDrawString(m_display, m_window, gc,
-                    rx + 4, entryTextY,
-                    label.c_str(), static_cast<int>(label.size()));
-    }
-}
-
 void X11Window::paint()
 {
-    GC gc = reinterpret_cast<GC>(m_gc);
     auto* fs = reinterpret_cast<XFontStruct*>(m_fontInfo);
+    X11RenderContext ctx(m_display, m_window,
+                         reinterpret_cast<GC>(m_gc), fs);
 
     const int W    = m_width;
     const int H    = m_height;
-    const int effH = H - FKEY_H;            // height available above the F-key bar
+    const int effH = H - FKEY_H;
     auto [topH, leftW] = computeLayout(W, effH);
 
-    // Divider background (fills the gaps between panels)
-    XSetForeground(m_display, gc, m_dividerPx);
-    XFillRectangle(m_display, m_window, gc,
-                   0, 0, static_cast<unsigned>(W), static_cast<unsigned>(effH));
+    // Fill divider color for the top area; panels overdraw their own regions
+    ctx.fillRect(0, 0, W, effH, {80, 80, 80});
 
-    // Directory panels
-    if (m_leftPanel)
-        renderDirectoryPanel(0, 0, leftW, topH, *m_leftPanel);
-    if (m_rightPanel)
-        renderDirectoryPanel(leftW + DIVIDER_W, 0,
-                             W - leftW - DIVIDER_W, topH, *m_rightPanel);
+    // Panel widgets
+    layoutPanels(W, H);
+    if (leftWidget())  leftWidget()->paint(ctx);
+    if (rightWidget()) rightWidget()->paint(ctx);
+    if (termWidget())  termWidget()->paint(ctx);
+    if (fkeyWidget())  fkeyWidget()->paint(ctx);
 
-    // Bottom panel (terminal placeholder) — ends at effH, not H
-    int botY = topH + DIVIDER_W;
-    int botH = effH - botY;
-    XSetForeground(m_display, gc, m_bottomBgPx);
-    XFillRectangle(m_display, m_window, gc,
-                   0, botY, static_cast<unsigned>(W), static_cast<unsigned>(botH));
-
-    const char* bottomLabel = "Terminal";
-    int len = static_cast<int>(strlen(bottomLabel));
-    int tw  = fs ? XTextWidth(fs, bottomLabel, len) : len * 7;
-    int th  = fs ? (fs->ascent + fs->descent) : 13;
-    int tx  = (W - tw) / 2;
-    int ty  = botY + (botH + th) / 2 - (fs ? fs->descent : 2);
-    XSetForeground(m_display, gc, m_bottomTextPx);
-    XDrawString(m_display, m_window, gc, tx, ty, bottomLabel, len);
-
-    // F-key bar
-    renderFKeyBar();
-
-    // Help overlay (drawn last, on top of everything)
-    if (helpWindow().isVisible()) renderHelpWindow();
+    // Modal widget overlays (drawn last, on top of everything)
+    helpWidget().layout(0, 0, W, H);
+    helpWidget().paint(ctx);
+    confirmWidget().layout(0, 0, W, H);
+    confirmWidget().paint(ctx);
 
     XFlush(m_display);
 }
 
-void X11Window::renderFKeyBar()
+
+// --- Event processing ---
+void X11Window::processEvent(XEvent& event)
 {
-    GC    gc   = reinterpret_cast<GC>(m_gc);
-    auto* fs   = reinterpret_cast<XFontStruct*>(m_fontInfo);
-    const int barY  = m_height - FKEY_H;
-    const int effW  = m_width - MOD_AREA_W;
-    const int cellW = std::max(1, effW / 10);
-    const int numW  = 16;
-    const int fontAscent  = fs ? fs->ascent  : 11;
-    const int fontDescent = fs ? fs->descent :  2;
-    const int textY = barY + (FKEY_H + fontAscent) / 2 - fontDescent;
-
-    // --- F-key cells ---
-    for (int i = 0; i < 10; ++i)
+    switch (event.type)
     {
-        int x = i * cellW;
-
-        // Number sub-column
-        XSetForeground(m_display, gc, m_fkeyNumBgPx);
-        XFillRectangle(m_display, m_window, gc,
-                       x, barY, static_cast<unsigned>(numW), FKEY_H);
-        XSetForeground(m_display, gc, m_fkeyNumFgPx);
-        std::string numStr = std::to_string(i + 1);
-        int nw = fs ? XTextWidth(fs, numStr.c_str(), static_cast<int>(numStr.size())) : 7;
-        XDrawString(m_display, m_window, gc,
-                    x + (numW - nw) / 2, textY,
-                    numStr.c_str(), static_cast<int>(numStr.size()));
-
-        // Label sub-column
-        const char* lbl    = FKEY_LABELS[activeModifierRow()][i];
-        int         lblLen = static_cast<int>(strlen(lbl));
-        int         lblW   = cellW - numW;
-        if (lbl[0] != '\0')
-        {
-            XSetForeground(m_display, gc, m_fkeyLblBgPx);
-            XFillRectangle(m_display, m_window, gc,
-                           x + numW, barY, static_cast<unsigned>(lblW), FKEY_H);
-            XSetForeground(m_display, gc, m_fkeyLblFgPx);
-            XDrawString(m_display, m_window, gc,
-                        x + numW + 2, textY, lbl, lblLen);
-        }
-        else
-        {
-            XSetForeground(m_display, gc, m_fkeyNumBgPx);
-            XFillRectangle(m_display, m_window, gc,
-                           x + numW, barY, static_cast<unsigned>(lblW), FKEY_H);
-        }
-    }
-
-    // --- Modifier cells ---
-    static const char* MOD_LABELS[3] = { "Alt", "Sft", "Ctl" };
-    for (int i = 0; i < 3; ++i)
-    {
-        int  x      = effW + i * MOD_CELL_W;
-        bool active = modifierActive(static_cast<Mod>(i));
-        XSetForeground(m_display, gc, active ? m_modActBgPx : m_modInaBgPx);
-        XFillRectangle(m_display, m_window, gc,
-                       x, barY, static_cast<unsigned>(MOD_CELL_W), FKEY_H);
-        XSetForeground(m_display, gc, active ? m_modActFgPx : m_modInaFgPx);
-        int mlen = static_cast<int>(strlen(MOD_LABELS[i]));
-        int mw   = fs ? XTextWidth(fs, MOD_LABELS[i], mlen) : mlen * 7;
-        XDrawString(m_display, m_window, gc,
-                    x + (MOD_CELL_W - mw) / 2, textY,
-                    MOD_LABELS[i], mlen);
-    }
-}
-
-void X11Window::renderHelpWindow()
-{
-    GC    gc = reinterpret_cast<GC>(m_gc);
-    auto* fs = reinterpret_cast<XFontStruct*>(m_fontInfo);
-    const int fontAscent  = fs ? fs->ascent  : 11;
-    const int fontDescent = fs ? fs->descent :  2;
-
-    auto box = uc::HelpWindow::computeBox(m_width, m_height);
-
-    // Background
-    unsigned long bgPx = allocRGB(m_display, 20, 20, 50);
-    XSetForeground(m_display, gc, bgPx);
-    XFillRectangle(m_display, m_window, gc,
-                   box.x, box.y,
-                   static_cast<unsigned>(box.w), static_cast<unsigned>(box.h));
-
-    // Border
-    unsigned long borderPx = allocRGB(m_display, 100, 180, 255);
-    XSetForeground(m_display, gc, borderPx);
-    XDrawRectangle(m_display, m_window, gc,
-                   box.x, box.y,
-                   static_cast<unsigned>(box.w - 1), static_cast<unsigned>(box.h - 1));
-
-    // Text lines
-    unsigned long titlePx = borderPx;
-    unsigned long textPx  = allocRGB(m_display, 220, 220, 220);
-    int y = box.y + uc::HelpWindow::PADDING + fontAscent;
-
-    for (int i = 0; uc::HelpWindow::LINES[i]; ++i)
-    {
-        const char* line = uc::HelpWindow::LINES[i];
-        int len = static_cast<int>(strlen(line));
-        if (len > 0)
-        {
-            XSetForeground(m_display, gc, i == 0 ? titlePx : textPx);
-            XDrawString(m_display, m_window, gc,
-                        box.x + uc::HelpWindow::PADDING, y, line, len);
-        }
-        y += uc::HelpWindow::LINE_H;
-    }
-
-    // Restore a neutral foreground so subsequent callers are unaffected
-    XSetForeground(m_display, gc, m_fileTextPx);
-}
-
-// --- Event loop ---
-void X11Window::run()
-{
-    if (!m_display) return;
-
-    Atom wm_delete = XInternAtom(m_display, "WM_DELETE_WINDOW", False);
-    m_running = true;
-
-    XEvent event = {};
-    while (m_running)
-    {
-        XNextEvent(m_display, &event);
-        switch (event.type)
-        {
-            case Expose:
-                if (event.xexpose.count == 0)
-                    paint();
-                break;
-
-            case ConfigureNotify:
-                setSize(event.xconfigure.width, event.xconfigure.height);
+        case Expose:
+            if (event.xexpose.count == 0)
                 paint();
-                break;
+            break;
 
-            case ButtonPress:
+        case ConfigureNotify:
+            setSize(event.xconfigure.width, event.xconfigure.height);
+            paint();
+            break;
+
+        case ButtonPress:
+        {
+            if (event.xbutton.button != Button1) break;
+            const int mx = event.xbutton.x, my = event.xbutton.y;
+
+            // Modal dialog captures all clicks when visible.
+            if (confirmWidget().isVisible())
             {
-                if (event.xbutton.button != Button1) break;
-                const int mx = event.xbutton.x, my = event.xbutton.y;
+                confirmWidget().handleMouseDown(mx, my);
+                break;
+            }
 
-                // F-key bar occupies the bottom FKEY_H rows.
-                if (my >= m_height - FKEY_H)
+            // F-key bar occupies the bottom FKEY_H rows.
+            if (my >= m_height - FKEY_H)
+            {
+                const int effW  = m_width - MOD_AREA_W;
+                const int cellW = std::max(1, effW / 10);
+                if (mx < effW)
                 {
-                    const int effW  = m_width - MOD_AREA_W;
-                    const int cellW = std::max(1, effW / 10);
-                    if (mx < effW)
-                    {
-                        int slot = std::min(mx / cellW, 9);
-                        Key key  = static_cast<Key>(static_cast<int>(Key::F1) + slot);
-                        handleKeyDown(key);
-                    }
-                    else
-                    {
-                        int modIdx = (mx - effW) / MOD_CELL_W;
-                        if (modIdx >= 0 && modIdx < 3)
-                        {
-                            toggleModifierSticky(static_cast<Mod>(modIdx));
-                            paint();
-                        }
-                    }
-                    break;
+                    int slot = std::min(mx / cellW, 9);
+                    Key key  = static_cast<Key>(static_cast<int>(Key::F1) + slot);
+                    handleKeyDown(key);
                 }
-
-                auto hit = hitTest(mx, my, m_width, m_height - FKEY_H);
-                if (hit == Hit::HorizDivider)
-                    m_drag = Drag::Horiz;
-                else if (hit == Hit::VertDivider)
-                    m_drag = Drag::Vert;
-                else if (hit == Hit::LeftPanel || hit == Hit::RightPanel)
+                else
                 {
-                    auto* left  = leftPanel();
-                    auto* right = rightPanel();
-                    if (left && right)
+                    int modIdx = (mx - effW) / MOD_CELL_W;
+                    if (modIdx >= 0 && modIdx < 3)
                     {
-                        left->setFocus(hit == Hit::LeftPanel);
-                        right->setFocus(hit == Hit::RightPanel);
+                        toggleModifierSticky(static_cast<Mod>(modIdx));
                         paint();
                     }
                 }
                 break;
             }
 
-            case MotionNotify:
+            auto hit = hitTest(mx, my, m_width, m_height - FKEY_H);
+            if (hit == Hit::HorizDivider)
+                m_drag = Drag::Horiz;
+            else if (hit == Hit::VertDivider)
+                m_drag = Drag::Vert;
+            else if (hit == Hit::LeftPanel || hit == Hit::RightPanel)
             {
-                const int mx    = event.xmotion.x, my = event.xmotion.y;
-                const int effH  = m_height - FKEY_H;
-
-                if (m_drag == Drag::Horiz && effH > 0)
+                auto* left  = leftPanel();
+                auto* right = rightPanel();
+                if (left && right)
                 {
-                    setHRatio(static_cast<float>(my) / effH);
+                    left->setFocus(hit == Hit::LeftPanel);
+                    right->setFocus(hit == Hit::RightPanel);
                     paint();
                 }
-                else if (m_drag == Drag::Vert && m_width > 0)
-                {
-                    setVRatio(static_cast<float>(mx) / m_width);
-                    paint();
-                }
-                else
-                {
-                    auto hit = hitTest(mx, my, m_width, effH);
-                    unsigned long cur = hit == Hit::HorizDivider ? m_curNS :
-                                        hit == Hit::VertDivider  ? m_curEW : m_curArrow;
-                    XDefineCursor(m_display, m_window, cur);
-                    XFlush(m_display);
-                }
-                break;
             }
-
-            case ButtonRelease:
-                m_drag = Drag::Idle;
-                break;
-
-            case KeyPress:
-            {
-                using Key = uc::BaseWindow::Key;
-                KeySym ks = XLookupKeysym(&event.xkey, 0);
-                switch (ks)
-                {
-                    case XK_F1:        handleKeyDown(Key::F1);     break;
-                    case XK_F2:        handleKeyDown(Key::F2);     break;
-                    case XK_F3:        handleKeyDown(Key::F3);     break;
-                    case XK_F4:        handleKeyDown(Key::F4);     break;
-                    case XK_F5:        handleKeyDown(Key::F5);     break;
-                    case XK_F6:        handleKeyDown(Key::F6);     break;
-                    case XK_F7:        handleKeyDown(Key::F7);     break;
-                    case XK_F8:        handleKeyDown(Key::F8);     break;
-                    case XK_F9:        handleKeyDown(Key::F9);     break;
-                    case XK_Up:        handleKeyDown(Key::Up);     break;
-                    case XK_Down:      handleKeyDown(Key::Down);   break;
-                    case XK_Return:    handleKeyDown(Key::Return); break;
-                    case XK_Tab:       handleKeyDown(Key::Tab);    break;
-                    case XK_Escape:    handleKeyDown(Key::Escape); break;
-                    case XK_q:         handleKeyDown(Key::Q);      m_running = false; break;
-                    case XK_F10:       handleKeyDown(Key::F10);    break;
-                    case XK_Shift_L:
-                    case XK_Shift_R:   setModifierPhysical(Mod::Shift, true);  paint(); break;
-                    case XK_Control_L:
-                    case XK_Control_R: setModifierPhysical(Mod::Ctrl,  true);  paint(); break;
-                    case XK_Alt_L:
-                    case XK_Alt_R:     setModifierPhysical(Mod::Alt,   true);  paint(); break;
-                    default: break;
-                }
-                break;
-            }
-
-            case KeyRelease:
-            {
-                KeySym ks = XLookupKeysym(&event.xkey, 0);
-                switch (ks)
-                {
-                    case XK_Shift_L:
-                    case XK_Shift_R:   setModifierPhysical(Mod::Shift, false); paint(); break;
-                    case XK_Control_L:
-                    case XK_Control_R: setModifierPhysical(Mod::Ctrl,  false); paint(); break;
-                    case XK_Alt_L:
-                    case XK_Alt_R:     setModifierPhysical(Mod::Alt,   false); paint(); break;
-                    default: break;
-                }
-                break;
-            }
-
-            case ClientMessage:
-                if (static_cast<Atom>(event.xclient.message_type) == m_atomKeyDown)
-                {
-                    // Dispatched from scheduleKeyDown() on the test thread.
-                    // Runs here on the main thread, serialised with rendering.
-                    handleKeyDown(static_cast<Key>(event.xclient.data.l[0]));
-                    // Signal scheduleKeyDown() that the key has been fully processed.
-                    {
-                        std::lock_guard<std::mutex> lk(m_keyMutex);
-                        m_keyProcessed = true;
-                    }
-                    m_keyCv.notify_one();
-                }
-                else if (static_cast<Atom>(event.xclient.data.l[0]) == wm_delete)
-                {
-                    if (m_closing || confirmQuit())
-                        m_running = false;
-                    else
-                        paint();    // restore window after cancelled dialog
-                }
-                break;
-
-            default:
-                break;
+            break;
         }
+
+        case MotionNotify:
+        {
+            const int mx    = event.xmotion.x, my = event.xmotion.y;
+            const int effH  = m_height - FKEY_H;
+
+            if (m_drag == Drag::Horiz && effH > 0)
+            {
+                setHRatio(static_cast<float>(my) / effH);
+                paint();
+            }
+            else if (m_drag == Drag::Vert && m_width > 0)
+            {
+                setVRatio(static_cast<float>(mx) / m_width);
+                paint();
+            }
+            else
+            {
+                auto hit = hitTest(mx, my, m_width, effH);
+                unsigned long cur = hit == Hit::HorizDivider ? m_curNS :
+                                    hit == Hit::VertDivider  ? m_curEW : m_curArrow;
+                XDefineCursor(m_display, m_window, cur);
+                XFlush(m_display);
+            }
+            break;
+        }
+
+        case ButtonRelease:
+            m_drag = Drag::Idle;
+            break;
+
+        case KeyPress:
+        {
+            using Key = uc::BaseWindow::Key;
+            KeySym ks = XLookupKeysym(&event.xkey, 0);
+            switch (ks)
+            {
+                case XK_F1:        handleKeyDown(Key::F1);     break;
+                case XK_F2:        handleKeyDown(Key::F2);     break;
+                case XK_F3:        handleKeyDown(Key::F3);     break;
+                case XK_F4:        handleKeyDown(Key::F4);     break;
+                case XK_F5:        handleKeyDown(Key::F5);     break;
+                case XK_F6:        handleKeyDown(Key::F6);     break;
+                case XK_F7:        handleKeyDown(Key::F7);     break;
+                case XK_F8:        handleKeyDown(Key::F8);     break;
+                case XK_F9:        handleKeyDown(Key::F9);     break;
+                case XK_Up:        handleKeyDown(Key::Up);     break;
+                case XK_Down:      handleKeyDown(Key::Down);   break;
+                case XK_Left:      handleKeyDown(Key::Left);   break;
+                case XK_Right:     handleKeyDown(Key::Right);  break;
+                case XK_Return:    handleKeyDown(Key::Return); break;
+                case XK_Tab:       handleKeyDown(Key::Tab);    break;
+                case XK_Escape:    handleKeyDown(Key::Escape); break;
+                case XK_q:         handleKeyDown(Key::Q);      m_running = false; break;
+                case XK_F10:       handleKeyDown(Key::F10);    break;
+                case XK_Shift_L:
+                case XK_Shift_R:   setModifierPhysical(Mod::Shift, true);  paint(); break;
+                case XK_Control_L:
+                case XK_Control_R: setModifierPhysical(Mod::Ctrl,  true);  paint(); break;
+                case XK_Alt_L:
+                case XK_Alt_R:     setModifierPhysical(Mod::Alt,   true);  paint(); break;
+                default: break;
+            }
+            break;
+        }
+
+        case KeyRelease:
+        {
+            KeySym ks = XLookupKeysym(&event.xkey, 0);
+            switch (ks)
+            {
+                case XK_Shift_L:
+                case XK_Shift_R:   setModifierPhysical(Mod::Shift, false); paint(); break;
+                case XK_Control_L:
+                case XK_Control_R: setModifierPhysical(Mod::Ctrl,  false); paint(); break;
+                case XK_Alt_L:
+                case XK_Alt_R:     setModifierPhysical(Mod::Alt,   false); paint(); break;
+                default: break;
+            }
+            break;
+        }
+
+        case ClientMessage:
+            if (static_cast<Atom>(event.xclient.message_type) == m_atomKeyDown)
+            {
+                // Dispatched from scheduleKeyDown() on the test thread.
+                // Runs here on the main thread, serialised with rendering.
+                handleKeyDown(static_cast<Key>(event.xclient.data.l[0]));
+                // Signal scheduleKeyDown() that the key has been fully processed.
+                {
+                    std::lock_guard<std::mutex> lk(m_keyMutex);
+                    m_keyProcessed = true;
+                }
+                m_keyCv.notify_one();
+            }
+            else if (static_cast<Atom>(event.xclient.data.l[0]) == m_atomWmDelete)
+            {
+                if (m_closing || confirmQuit())
+                    m_running = false;
+                else
+                    paint();    // restore window after cancelled dialog
+            }
+            break;
+
+        default:
+            break;
+    }
+}
+
+// --- Event loop ---
+void X11Window::run()
+{
+    if (!m_display) return;
+    m_running = true;
+    XEvent event = {};
+    while (m_running)
+    {
+        XNextEvent(m_display, &event);
+        processEvent(event);
+    }
+}
+
+void X11Window::pumpEventsUntil(std::function<bool()> done)
+{
+    if (!m_display) return;
+    XEvent event = {};
+    while (!done())
+    {
+        XNextEvent(m_display, &event);
+        processEvent(event);
     }
 }
 
@@ -546,8 +336,8 @@ void X11Window::close()
     m_closing = true;
     if (!m_display || !m_window) { m_running = false; return; }
     // Post WM_DELETE_WINDOW to ourselves to unblock XNextEvent
-    Atom wm_protocols = XInternAtom(m_display, "WM_PROTOCOLS",    False);
-    Atom wm_delete    = XInternAtom(m_display, "WM_DELETE_WINDOW", False);
+    Atom wm_protocols = static_cast<Atom>(m_atomWmProtocols);
+    Atom wm_delete    = static_cast<Atom>(m_atomWmDelete);
     XClientMessageEvent ev = {};
     ev.type         = ClientMessage;
     ev.window       = m_window;
@@ -583,163 +373,6 @@ void X11Window::scheduleKeyDown(Key key)
     XFlush(m_display);
 
     m_keyCv.wait(lock, [this] { return m_keyProcessed; });
-}
-
-bool X11Window::showYesNoDialog(const std::string& line1, const std::string& line2)
-{
-    GC    gc = reinterpret_cast<GC>(m_gc);
-    auto* fs = reinterpret_cast<XFontStruct*>(m_fontInfo);
-
-    const bool twoLines = !line2.empty();
-    const int  dlgW = 380;
-    const int  dlgH = twoLines ? 130 : 110;
-    const int  btnW = 80, btnH = 28;
-
-    // Dialog and button positions — recalculated on resize
-    int dlgX = (m_width  - dlgW) / 2;
-    int dlgY = (m_height - dlgH) / 2;
-    int btnY = dlgY + dlgH - btnH - 12;
-    int yesX = dlgX + dlgW / 2 - btnW - 10;
-    int noX  = dlgX + dlgW / 2 + 10;
-
-    unsigned long dlgBgPx = allocRGB(m_display, 40, 40, 55);
-    unsigned long btnBgPx = allocRGB(m_display, 55, 55, 75);
-
-    // focused: 0 = Yes, 1 = No  (default No — safer)
-    int focused = 1;
-
-    auto drawText = [&](const std::string& s, int y)
-    {
-        int len = static_cast<int>(s.size());
-        int tw  = fs ? XTextWidth(fs, s.c_str(), len) : len * 7;
-        XSetForeground(m_display, gc, m_selTextPx);
-        XDrawString(m_display, m_window, gc,
-                    dlgX + (dlgW - tw) / 2, y, s.c_str(), len);
-    };
-
-    auto drawDialog = [&]()
-    {
-        // Border + background
-        XSetForeground(m_display, gc, m_borderFocPx);
-        XDrawRectangle(m_display, m_window, gc,
-                       dlgX - 1, dlgY - 1,
-                       static_cast<unsigned>(dlgW + 1),
-                       static_cast<unsigned>(dlgH + 1));
-        XSetForeground(m_display, gc, dlgBgPx);
-        XFillRectangle(m_display, m_window, gc,
-                       dlgX, dlgY,
-                       static_cast<unsigned>(dlgW),
-                       static_cast<unsigned>(dlgH));
-
-        // Text lines
-        const int fontAsc = fs ? fs->ascent : 11;
-        const int lineH   = fs ? (fs->ascent + fs->descent + 2) : 15;
-        int textAreaH     = twoLines ? lineH * 2 : lineH;
-        int textTop       = dlgY + (dlgH - btnH - 20 - textAreaH) / 2 + fontAsc;
-        drawText(line1, textTop);
-        if (twoLines) drawText(line2, textTop + lineH);
-
-        // Buttons
-        auto drawBtn = [&](int bx, int by, const char* label, bool hot)
-        {
-            XSetForeground(m_display, gc, hot ? m_selFocPx : btnBgPx);
-            XFillRectangle(m_display, m_window, gc,
-                           bx, by,
-                           static_cast<unsigned>(btnW), static_cast<unsigned>(btnH));
-            XSetForeground(m_display, gc, m_borderFocPx);
-            XDrawRectangle(m_display, m_window, gc,
-                           bx, by,
-                           static_cast<unsigned>(btnW), static_cast<unsigned>(btnH));
-            int llen = static_cast<int>(strlen(label));
-            int lw   = fs ? XTextWidth(fs, label, llen) : llen * 7;
-            int ly   = by + (btnH + fontAsc) / 2 - (fs ? fs->descent : 2);
-            XSetForeground(m_display, gc, m_selTextPx);
-            XDrawString(m_display, m_window, gc,
-                        bx + (btnW - lw) / 2, ly, label, llen);
-        };
-        drawBtn(yesX, btnY, "Yes", focused == 0);
-        drawBtn(noX,  btnY, "No",  focused == 1);
-        XFlush(m_display);
-    };
-
-    drawDialog();
-
-    // Mini event loop — runs until user confirms or cancels
-    XEvent ev = {};
-    while (true)
-    {
-        XNextEvent(m_display, &ev);
-
-        if (ev.type == Expose && ev.xexpose.count == 0)
-        {
-            paint();
-            drawDialog();
-        }
-        else if (ev.type == ConfigureNotify)
-        {
-            setSize(ev.xconfigure.width, ev.xconfigure.height);
-            dlgX = (m_width  - dlgW) / 2;
-            dlgY = (m_height - dlgH) / 2;
-            btnY = dlgY + dlgH - btnH - 12;
-            yesX = dlgX + dlgW / 2 - btnW - 10;
-            noX  = dlgX + dlgW / 2 + 10;
-            paint();
-            drawDialog();
-        }
-        else if (ev.type == KeyPress)
-        {
-            KeySym ks = XLookupKeysym(&ev.xkey, 0);
-            if (ks == XK_Return)
-            {
-                if (focused != 0) paint();
-                return focused == 0;
-            }
-            if (ks == XK_Escape || ks == XK_n || ks == XK_N)
-            {
-                paint();
-                return false;
-            }
-            if (ks == XK_y || ks == XK_Y)
-                return true;
-            if (ks == XK_Tab || ks == XK_Left || ks == XK_Right)
-            {
-                focused = 1 - focused;
-                drawDialog();
-            }
-        }
-        else if (ev.type == ButtonPress && ev.xbutton.button == Button1)
-        {
-            int mx = ev.xbutton.x, my = ev.xbutton.y;
-            if (mx >= yesX && mx < yesX + btnW &&
-                my >= btnY && my < btnY + btnH)
-                return true;
-            if (mx >= noX && mx < noX + btnW &&
-                my >= btnY && my < btnY + btnH)
-            { paint(); return false; }
-        }
-    }
-}
-
-bool X11Window::confirmQuit()
-{
-    if (m_testDialogAnswer.has_value())
-    {
-        bool ans = *m_testDialogAnswer;
-        m_testDialogAnswer.reset();
-        return ans;
-    }
-    return showYesNoDialog("Quit UniCommander?", "");
-}
-
-bool X11Window::confirmCopy(const std::string& srcName, const std::string& dstPath)
-{
-    if (m_testDialogAnswer.has_value())
-    {
-        bool ans = *m_testDialogAnswer;
-        m_testDialogAnswer.reset();
-        return ans;
-    }
-    return showYesNoDialog("Copy \"" + srcName + "\"", "to " + dstPath);
 }
 
 std::unique_ptr<uc::Window> createWindow()

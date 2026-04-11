@@ -15,16 +15,12 @@ public:
     void run()               override;
     void close()             override;
     void invalidate()        override { InvalidateRect(m_hwnd, nullptr, FALSE); }
-    bool confirmQuit()       override;
-    bool confirmCopy(const std::string& srcName, const std::string& dstPath) override;
     void scheduleKeyDown(Key key) override;
+    void pumpEventsUntil(std::function<bool()> done) override;
 
 private:
     static LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
     void paint(HDC hdc);
-    void renderDirectoryPanel(HDC hdc, RECT rect, uc::DirectoryPanel& panel);
-    void renderFKeyBar(HDC hdc, int W, int H);
-    void renderHelpWindow(HDC hdc, int W, int H);
 
     HWND      m_hwnd      { nullptr };
     HINSTANCE m_hinstance { nullptr };
