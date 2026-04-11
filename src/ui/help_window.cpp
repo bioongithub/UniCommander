@@ -10,6 +10,7 @@ const char* const HelpWindow::LINES[] = {
     "Enter     Open dir / parent (..)",
     "",
     "F1        Help (this screen)",
+    "F5        Copy to other panel",
     "F10       Quit (with confirmation)",
     "",
     "Escape or F1 to close",

@@ -466,6 +466,14 @@ void X11Window::run()
                 switch (ks)
                 {
                     case XK_F1:        handleKeyDown(Key::F1);     break;
+                    case XK_F2:        handleKeyDown(Key::F2);     break;
+                    case XK_F3:        handleKeyDown(Key::F3);     break;
+                    case XK_F4:        handleKeyDown(Key::F4);     break;
+                    case XK_F5:        handleKeyDown(Key::F5);     break;
+                    case XK_F6:        handleKeyDown(Key::F6);     break;
+                    case XK_F7:        handleKeyDown(Key::F7);     break;
+                    case XK_F8:        handleKeyDown(Key::F8);     break;
+                    case XK_F9:        handleKeyDown(Key::F9);     break;
                     case XK_Up:        handleKeyDown(Key::Up);     break;
                     case XK_Down:      handleKeyDown(Key::Down);   break;
                     case XK_Return:    handleKeyDown(Key::Return); break;
@@ -577,20 +585,15 @@ void X11Window::scheduleKeyDown(Key key)
     m_keyCv.wait(lock, [this] { return m_keyProcessed; });
 }
 
-bool X11Window::confirmQuit()
+bool X11Window::showYesNoDialog(const std::string& line1, const std::string& line2)
 {
-    if (m_testDialogAnswer.has_value())
-    {
-        bool ans = *m_testDialogAnswer;
-        m_testDialogAnswer.reset();
-        return ans;
-    }
-
     GC    gc = reinterpret_cast<GC>(m_gc);
     auto* fs = reinterpret_cast<XFontStruct*>(m_fontInfo);
 
-    const int dlgW = 300, dlgH = 110;
-    const int btnW = 80,  btnH = 28;
+    const bool twoLines = !line2.empty();
+    const int  dlgW = 380;
+    const int  dlgH = twoLines ? 130 : 110;
+    const int  btnW = 80, btnH = 28;
 
     // Dialog and button positions — recalculated on resize
     int dlgX = (m_width  - dlgW) / 2;
@@ -599,16 +602,24 @@ bool X11Window::confirmQuit()
     int yesX = dlgX + dlgW / 2 - btnW - 10;
     int noX  = dlgX + dlgW / 2 + 10;
 
-    // Local colors
-    unsigned long dlgBgPx  = allocRGB(m_display, 40,  40,  55);
-    unsigned long btnBgPx  = allocRGB(m_display, 55,  55,  75);
+    unsigned long dlgBgPx = allocRGB(m_display, 40, 40, 55);
+    unsigned long btnBgPx = allocRGB(m_display, 55, 55, 75);
 
     // focused: 0 = Yes, 1 = No  (default No — safer)
     int focused = 1;
 
+    auto drawText = [&](const std::string& s, int y)
+    {
+        int len = static_cast<int>(s.size());
+        int tw  = fs ? XTextWidth(fs, s.c_str(), len) : len * 7;
+        XSetForeground(m_display, gc, m_selTextPx);
+        XDrawString(m_display, m_window, gc,
+                    dlgX + (dlgW - tw) / 2, y, s.c_str(), len);
+    };
+
     auto drawDialog = [&]()
     {
-        // Dialog border + background
+        // Border + background
         XSetForeground(m_display, gc, m_borderFocPx);
         XDrawRectangle(m_display, m_window, gc,
                        dlgX - 1, dlgY - 1,
@@ -620,38 +631,32 @@ bool X11Window::confirmQuit()
                        static_cast<unsigned>(dlgW),
                        static_cast<unsigned>(dlgH));
 
-        // Title text
-        const char* msg  = "Quit UniCommander?";
-        int         mlen = static_cast<int>(strlen(msg));
-        int         mw   = fs ? XTextWidth(fs, msg, mlen) : mlen * 7;
-        int         my   = dlgY + (dlgH - btnH - 20) / 2
-                           + (fs ? fs->ascent : 11);
-        XSetForeground(m_display, gc, m_selTextPx);
-        XDrawString(m_display, m_window, gc,
-                    dlgX + (dlgW - mw) / 2, my, msg, mlen);
+        // Text lines
+        const int fontAsc = fs ? fs->ascent : 11;
+        const int lineH   = fs ? (fs->ascent + fs->descent + 2) : 15;
+        int textAreaH     = twoLines ? lineH * 2 : lineH;
+        int textTop       = dlgY + (dlgH - btnH - 20 - textAreaH) / 2 + fontAsc;
+        drawText(line1, textTop);
+        if (twoLines) drawText(line2, textTop + lineH);
 
-        // Draw one button: helper lambda
+        // Buttons
         auto drawBtn = [&](int bx, int by, const char* label, bool hot)
         {
             XSetForeground(m_display, gc, hot ? m_selFocPx : btnBgPx);
             XFillRectangle(m_display, m_window, gc,
                            bx, by,
-                           static_cast<unsigned>(btnW),
-                           static_cast<unsigned>(btnH));
+                           static_cast<unsigned>(btnW), static_cast<unsigned>(btnH));
             XSetForeground(m_display, gc, m_borderFocPx);
             XDrawRectangle(m_display, m_window, gc,
                            bx, by,
-                           static_cast<unsigned>(btnW),
-                           static_cast<unsigned>(btnH));
+                           static_cast<unsigned>(btnW), static_cast<unsigned>(btnH));
             int llen = static_cast<int>(strlen(label));
             int lw   = fs ? XTextWidth(fs, label, llen) : llen * 7;
-            int ly   = by + (btnH + (fs ? fs->ascent : 11)) / 2
-                       - (fs ? fs->descent : 2);
+            int ly   = by + (btnH + fontAsc) / 2 - (fs ? fs->descent : 2);
             XSetForeground(m_display, gc, m_selTextPx);
             XDrawString(m_display, m_window, gc,
                         bx + (btnW - lw) / 2, ly, label, llen);
         };
-
         drawBtn(yesX, btnY, "Yes", focused == 0);
         drawBtn(noX,  btnY, "No",  focused == 1);
         XFlush(m_display);
@@ -686,7 +691,7 @@ bool X11Window::confirmQuit()
             KeySym ks = XLookupKeysym(&ev.xkey, 0);
             if (ks == XK_Return)
             {
-                if (focused != 0) paint();   // cancel: restore window
+                if (focused != 0) paint();
                 return focused == 0;
             }
             if (ks == XK_Escape || ks == XK_n || ks == XK_N)
@@ -705,14 +710,36 @@ bool X11Window::confirmQuit()
         else if (ev.type == ButtonPress && ev.xbutton.button == Button1)
         {
             int mx = ev.xbutton.x, my = ev.xbutton.y;
-            bool onYes = (mx >= yesX && mx < yesX + btnW &&
-                          my >= btnY && my < btnY + btnH);
-            bool onNo  = (mx >= noX  && mx < noX  + btnW &&
-                          my >= btnY && my < btnY + btnH);
-            if (onYes) return true;
-            if (onNo)  { paint(); return false; }
+            if (mx >= yesX && mx < yesX + btnW &&
+                my >= btnY && my < btnY + btnH)
+                return true;
+            if (mx >= noX && mx < noX + btnW &&
+                my >= btnY && my < btnY + btnH)
+            { paint(); return false; }
         }
     }
+}
+
+bool X11Window::confirmQuit()
+{
+    if (m_testDialogAnswer.has_value())
+    {
+        bool ans = *m_testDialogAnswer;
+        m_testDialogAnswer.reset();
+        return ans;
+    }
+    return showYesNoDialog("Quit UniCommander?", "");
+}
+
+bool X11Window::confirmCopy(const std::string& srcName, const std::string& dstPath)
+{
+    if (m_testDialogAnswer.has_value())
+    {
+        bool ans = *m_testDialogAnswer;
+        m_testDialogAnswer.reset();
+        return ans;
+    }
+    return showYesNoDialog("Copy \"" + srcName + "\"", "to " + dstPath);
 }
 
 std::unique_ptr<uc::Window> createWindow()

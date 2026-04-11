@@ -116,8 +116,11 @@ public:
     }
 
     // --- Event handling ---
-    virtual void invalidate()   = 0;  // platform: schedule a repaint
-    virtual bool confirmQuit()  = 0;  // platform: show confirmation dialog, true = quit
+    virtual void invalidate()  = 0;   // platform: schedule a repaint
+    virtual bool confirmQuit() = 0;   // platform: show quit confirmation dialog
+    // platform: show copy confirmation dialog ("Copy srcName to dstPath?")
+    virtual bool confirmCopy(const std::string& srcName,
+                             const std::string& dstPath) = 0;
     void handleKeyDown(Key key);
 
     // Dispatch a key event so that handleKeyDown() runs on the platform's main
@@ -182,6 +185,7 @@ protected:
         m_leftPanel->setFocus(true);
     }
 
+    void handleCopy();   // implements F5: copy selected entry to other panel
     static float clamp(float v) { return std::clamp(v, 0.1f, 0.9f); }
     static std::string serializeEntries(const DirectoryPanel* panel);
 };

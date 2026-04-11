@@ -42,3 +42,7 @@
 
 # Build directory
 build*/
+
+# Python cache
+__pycache__/
+*.pyc

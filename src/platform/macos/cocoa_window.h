@@ -23,6 +23,7 @@ public:
     void close()       override;
     void invalidate()  override;
     bool confirmQuit() override;
+    bool confirmCopy(const std::string& srcName, const std::string& dstPath) override;
 
 private:
     NSWindow*         m_window      { nullptr };

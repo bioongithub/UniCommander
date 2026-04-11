@@ -38,6 +38,7 @@ The driver waits for this line before sending any commands.
 | `modclick <mod>` | Toggle sticky state of a modifier indicator; mod: `alt`, `shift`, `ctrl` |
 | `dialog yes\|no` | Pre-arm the next confirmation dialog; `confirmQuit()` returns the answer immediately without showing a native dialog |
 | `reset <dir>` | Reinitialise both panels to `<dir>`, restore default state; responds with a state snapshot |
+| `setpath left\|right <path>` | Set one panel's directory to `<path>` without affecting the other; responds with a state snapshot |
 | `state` | Request a state snapshot (see below) |
 | `quit` | Emergency close — bypasses confirmation dialog; use F10 for normal exit |
 | `click <x> <y>` | Mouse button down + up at pixel coords *(not yet implemented)* |

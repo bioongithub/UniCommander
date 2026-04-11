@@ -71,6 +71,27 @@ static void testLoop(std::weak_ptr<uc::Window> winWeak)
             continue;
         }
 
+        if (line.substr(0, 8) == "setpath ")
+        {
+            // format: setpath left|right <absolute-path>
+            std::string rest = line.substr(8);
+            auto sp = rest.find(' ');
+            if (sp != std::string::npos)
+            {
+                std::string side = rest.substr(0, sp);
+                std::string path = rest.substr(sp + 1);
+                auto* base = dynamic_cast<uc::BaseWindow*>(win.get());
+                if (base)
+                {
+                    auto* panel = (side == "left") ? base->leftPanel()
+                                                   : base->rightPanel();
+                    if (panel) panel->setPath(path);
+                    std::cout << win->stateSnapshot() << "\n";
+                }
+            }
+            continue;
+        }
+
         if (line.substr(0, 8) == "keydown ")
         {
             std::string keyName = line.substr(8);

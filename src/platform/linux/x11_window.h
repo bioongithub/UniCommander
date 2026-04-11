@@ -20,8 +20,10 @@ public:
     void run()              override;
     void close()            override;
     void invalidate()       override;
-    bool confirmQuit()           override;
-    void scheduleKeyDown(Key key) override;
+    bool confirmQuit()                                           override;
+    bool confirmCopy(const std::string& srcName,
+                     const std::string& dstPath)                override;
+    void scheduleKeyDown(Key key)                               override;
 
 private:
     void paint();
@@ -29,6 +31,8 @@ private:
                               uc::DirectoryPanel& panel);
     void renderFKeyBar();
     void renderHelpWindow();
+    // Generic Yes/No dialog drawn into the window; returns true if Yes chosen.
+    bool showYesNoDialog(const std::string& line1, const std::string& line2);
 
     _XDisplay*    m_display  { nullptr };
     unsigned long m_window   { 0 };       // X11 Window  = unsigned long

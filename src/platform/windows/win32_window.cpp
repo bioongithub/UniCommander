@@ -111,6 +111,20 @@ bool Win32Window::confirmQuit()
     return r == IDYES;
 }
 
+bool Win32Window::confirmCopy(const std::string& srcName, const std::string& dstPath)
+{
+    if (m_testDialogAnswer.has_value())
+    {
+        bool ans = *m_testDialogAnswer;
+        m_testDialogAnswer.reset();
+        return ans;
+    }
+    std::string msg = "Copy \"" + srcName + "\" to:\n" + dstPath;
+    int r = MessageBoxA(m_hwnd, msg.c_str(), "UniCommander - Copy",
+                        MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON1);
+    return r == IDYES;
+}
+
 // --- Rendering ---
 void Win32Window::renderDirectoryPanel(HDC hdc, RECT rect, uc::DirectoryPanel& panel)
 {
@@ -397,6 +411,14 @@ LRESULT CALLBACK Win32Window::wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             switch (wp)
             {
                 case VK_F1:      self->handleKeyDown(Key::F1);     return 0;
+                case VK_F2:      self->handleKeyDown(Key::F2);     return 0;
+                case VK_F3:      self->handleKeyDown(Key::F3);     return 0;
+                case VK_F4:      self->handleKeyDown(Key::F4);     return 0;
+                case VK_F5:      self->handleKeyDown(Key::F5);     return 0;
+                case VK_F6:      self->handleKeyDown(Key::F6);     return 0;
+                case VK_F7:      self->handleKeyDown(Key::F7);     return 0;
+                case VK_F8:      self->handleKeyDown(Key::F8);     return 0;
+                case VK_F9:      self->handleKeyDown(Key::F9);     return 0;
                 case VK_UP:      self->handleKeyDown(Key::Up);     return 0;
                 case VK_DOWN:    self->handleKeyDown(Key::Down);   return 0;
                 case VK_RETURN:  self->handleKeyDown(Key::Return); return 0;

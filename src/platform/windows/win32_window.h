@@ -16,6 +16,7 @@ public:
     void close()             override;
     void invalidate()        override { InvalidateRect(m_hwnd, nullptr, FALSE); }
     bool confirmQuit()       override;
+    bool confirmCopy(const std::string& srcName, const std::string& dstPath) override;
     void scheduleKeyDown(Key key) override;
 
 private:

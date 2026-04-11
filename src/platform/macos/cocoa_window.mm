@@ -297,6 +297,14 @@ using Hit = uc::BaseWindow::Hit;
     switch (event.keyCode)
     {
         case 122: _owner->handleKeyDown(Key::F1);     break;  // F1
+        case 120: _owner->handleKeyDown(Key::F2);     break;  // F2
+        case 99:  _owner->handleKeyDown(Key::F3);     break;  // F3
+        case 118: _owner->handleKeyDown(Key::F4);     break;  // F4
+        case 96:  _owner->handleKeyDown(Key::F5);     break;  // F5
+        case 97:  _owner->handleKeyDown(Key::F6);     break;  // F6
+        case 98:  _owner->handleKeyDown(Key::F7);     break;  // F7
+        case 100: _owner->handleKeyDown(Key::F8);     break;  // F8
+        case 101: _owner->handleKeyDown(Key::F9);     break;  // F9
         case 126: _owner->handleKeyDown(Key::Up);     break;  // arrow up
         case 125: _owner->handleKeyDown(Key::Down);   break;  // arrow down
         case 36:  _owner->handleKeyDown(Key::Return); break;  // return
@@ -522,6 +530,25 @@ bool CocoaWindow::confirmQuit()
     [alert addButtonWithTitle:@"Yes"];
     [alert addButtonWithTitle:@"No"];
     [alert setAlertStyle:NSAlertStyleWarning];
+    return [alert runModal] == NSAlertFirstButtonReturn;
+}
+
+bool CocoaWindow::confirmCopy(const std::string& srcName, const std::string& dstPath)
+{
+    if (m_testDialogAnswer.has_value())
+    {
+        bool ans = *m_testDialogAnswer;
+        m_testDialogAnswer.reset();
+        return ans;
+    }
+    NSString* info = [NSString stringWithFormat:@"Copy \"%s\" to %s?",
+                      srcName.c_str(), dstPath.c_str()];
+    NSAlert* alert = [[NSAlert alloc] init];
+    [alert setMessageText:@"Copy"];
+    [alert setInformativeText:info];
+    [alert addButtonWithTitle:@"Copy"];
+    [alert addButtonWithTitle:@"Cancel"];
+    [alert setAlertStyle:NSAlertStyleInformational];
     return [alert runModal] == NSAlertFirstButtonReturn;
 }
 

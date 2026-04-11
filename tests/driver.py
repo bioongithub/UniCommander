@@ -53,6 +53,12 @@ class TestDriver:
         assert state.get("modCtrl")       == "0",                 f"reset: modCtrl={state.get('modCtrl')!r}"
         assert state.get("helpVisible")   == "0",                 f"reset: helpVisible={state.get('helpVisible')!r}"
 
+    def setpath(self, side, path):
+        """Set left or right panel to the given absolute path."""
+        self.send(f"setpath {side} {path}")
+        line = self.proc.stdout.readline().strip()
+        return dict(pair.split("=", 1) for pair in line.split())
+
     def dialog(self, answer):
         """Pre-arm the next confirmation dialog. answer: 'yes' or 'no'."""
         self.send(f"dialog {answer}")
@@ -140,6 +146,7 @@ def _run_all(executable):
     from test_fkey_bar import FKeyBarTests
     from test_modifiers import ModifierTests
     from test_help import HelpTests
+    from test_copy import CopyTests
 
     suites = [
         InitialStateTests,
@@ -150,6 +157,7 @@ def _run_all(executable):
         FKeyBarTests,
         ModifierTests,
         HelpTests,
+        CopyTests,
     ]
 
     app = TestDriver(executable, _TESTS_DIR)
