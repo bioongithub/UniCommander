@@ -1,5 +1,6 @@
 #include "x11_window.h"
 #include "x11_render_context.h"
+#include "test_runner.h"
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
@@ -78,7 +79,7 @@ bool X11Window::create(const std::string& title, int width, int height)
     m_curEW    = XCreateFontCursor(m_display, XC_sb_h_double_arrow);
     XDefineCursor(m_display, m_window, m_curArrow);
 
-    m_atomKeyDown     = XInternAtom(m_display, "UC_KEY_DOWN",      False);
+    m_atomDrainQueue  = XInternAtom(m_display, "UC_DRAIN_QUEUE",   False);
     m_atomWmDelete    = XInternAtom(m_display, "WM_DELETE_WINDOW", False);
     m_atomWmProtocols = XInternAtom(m_display, "WM_PROTOCOLS",     False);
 
@@ -276,17 +277,11 @@ void X11Window::processEvent(XEvent& event)
         }
 
         case ClientMessage:
-            if (static_cast<Atom>(event.xclient.message_type) == m_atomKeyDown)
+            if (static_cast<Atom>(event.xclient.message_type) == m_atomDrainQueue)
             {
-                // Dispatched from scheduleKeyDown() on the test thread.
+                // Posted from testWakeup() on the test thread.
                 // Runs here on the main thread, serialised with rendering.
-                handleKeyDown(static_cast<Key>(event.xclient.data.l[0]));
-                // Signal scheduleKeyDown() that the key has been fully processed.
-                {
-                    std::lock_guard<std::mutex> lk(m_keyMutex);
-                    m_keyProcessed = true;
-                }
-                m_keyCv.notify_one();
+                drainTestQueue(this);
             }
             else if (static_cast<Atom>(event.xclient.data.l[0]) == m_atomWmDelete)
             {
@@ -349,30 +344,28 @@ void X11Window::close()
     XFlush(m_display);
 }
 
-void X11Window::scheduleKeyDown(Key key)
+std::function<void()> X11Window::testWakeup()
 {
-    // Post a UC_KEY_DOWN client message so handleKeyDown() runs on the main
-    // thread (serialised with XNextEvent / paint), not on the test thread.
-    // Then block until the main thread signals that it has finished handling
-    // the key — this gives scheduleKeyDown() the same synchronous semantics
-    // as Win32's SendMessage(WM_APP+1), so state queries issued immediately
-    // after return see the updated panel state.
-    if (!m_display || !m_window) return;
-
-    std::unique_lock<std::mutex> lock(m_keyMutex);
-    m_keyProcessed = false;
-
-    XClientMessageEvent ev = {};
-    ev.type         = ClientMessage;
-    ev.window       = m_window;
-    ev.message_type = m_atomKeyDown;
-    ev.format       = 32;
-    ev.data.l[0]    = static_cast<long>(key);
-    XSendEvent(m_display, m_window, False, NoEventMask,
-               reinterpret_cast<XEvent*>(&ev));
-    XFlush(m_display);
-
-    m_keyCv.wait(lock, [this] { return m_keyProcessed; });
+    // Returns a callable safe to invoke from the test thread.
+    // Posting UC_DRAIN_QUEUE unblocks XNextEvent so drainTestQueue() runs
+    // on the main thread, serialised with rendering.
+    // XInitThreads() was already called in create(), so XSendEvent from
+    // another thread is safe.
+    auto* display = m_display;
+    auto  window  = m_window;
+    auto  atom    = m_atomDrainQueue;
+    return [display, window, atom]()
+    {
+        if (!display || !window) return;
+        XClientMessageEvent ev = {};
+        ev.type         = ClientMessage;
+        ev.window       = window;
+        ev.message_type = atom;
+        ev.format       = 32;
+        XSendEvent(display, window, False, NoEventMask,
+                   reinterpret_cast<XEvent*>(&ev));
+        XFlush(display);
+    };
 }
 
 std::unique_ptr<uc::Window> createWindow()

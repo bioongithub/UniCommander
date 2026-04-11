@@ -150,16 +150,15 @@ public:
     virtual void invalidate() = 0;   // schedule a repaint
     // Pump native events until done() returns true (used by modal message loops).
     virtual void pumpEventsUntil(std::function<bool()> done) = 0;
+    // Returns a callable that is safe to invoke from any thread; when called it
+    // wakes up the platform's main event loop so it calls drainTestQueue().
+    virtual std::function<void()> testWakeup() = 0;
 
     // Confirmation dialogs -- implemented in base_window.cpp using ConfirmWidget.
     bool confirmQuit();
     bool confirmCopy(const std::string& srcName, const std::string& dstPath);
 
     void handleKeyDown(Key key);
-
-    // Dispatch a key event on the platform's main thread.
-    // Default calls handleKeyDown() directly; Win32 overrides to use SendMessage.
-    virtual void scheduleKeyDown(Key key) { handleKeyDown(key); }
 
     bool isClosing() const { return m_closing; }
 

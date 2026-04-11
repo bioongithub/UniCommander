@@ -1,4 +1,5 @@
 #include "ui/window.h"
+#include "ui/base_window.h"
 #include "test_runner.h"
 #include <filesystem>
 #include <iostream>
@@ -41,14 +42,21 @@ int main(int argc, char* argv[])
 
     std::thread testThread;
     if (testMode)
-        testThread = startTestThread(std::weak_ptr<uc::Window>(window));
+    {
+        auto* base = dynamic_cast<uc::BaseWindow*>(window.get());
+        testThread = startTestThread(base ? base->testWakeup() : [](){});
+    }
 
     window->run();
 
-    // Join the test thread before returning so the CRT never sees a live
-    // thread during process shutdown (which would call std::terminate).
+    // Detach the test thread instead of joining: when the app exits via F10
+    // the test thread may be blocking on std::getline(std::cin) waiting for
+    // the Python driver that is itself waiting for the process to exit.
+    // Joining here would deadlock. Detach makes the thread non-joinable so
+    // the destructor does not call std::terminate; the OS terminates all
+    // threads when main() returns.
     if (testThread.joinable())
-        testThread.join();
+        testThread.detach();
 
     return 0;
 }

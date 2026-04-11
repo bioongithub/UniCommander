@@ -1,7 +1,6 @@
 #pragma once
 #include "ui/base_window.h"
-#include <condition_variable>
-#include <mutex>
+#include <functional>
 
 // Forward-declare X11 internals without pulling in <X11/Xlib.h>,
 // which defines a conflicting global 'Window' typedef.
@@ -20,8 +19,8 @@ public:
     void run()              override;
     void close()            override;
     void invalidate()       override;
-    void scheduleKeyDown(Key key)                               override;
     void pumpEventsUntil(std::function<bool()> done)            override;
+    std::function<void()> testWakeup()                          override;
 
 private:
     void paint();
@@ -39,13 +38,7 @@ private:
     unsigned long m_curEW       { 0 };
 
     // Atoms
-    unsigned long m_atomKeyDown    { 0 };  // UC_KEY_DOWN (test-thread dispatch)
+    unsigned long m_atomDrainQueue { 0 };  // UC_DRAIN_QUEUE (test-thread wakeup)
     unsigned long m_atomWmDelete   { 0 };  // WM_DELETE_WINDOW
     unsigned long m_atomWmProtocols{ 0 };  // WM_PROTOCOLS
-
-    // Synchronise scheduleKeyDown(): test thread blocks until the main thread
-    // finishes handling the key (mirrors Win32 SendMessage synchronous semantics).
-    std::mutex              m_keyMutex;
-    std::condition_variable m_keyCv;
-    bool                    m_keyProcessed { false };
 };

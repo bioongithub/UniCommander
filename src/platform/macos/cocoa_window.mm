@@ -1,6 +1,7 @@
 #import <Cocoa/Cocoa.h>
 #include "cocoa_window.h"
 #include "cocoa_render_context.h"
+#include "test_runner.h"
 #include <filesystem>
 
 static const CGFloat DIVIDER_W = uc::BaseWindow::DIVIDER_W;
@@ -330,6 +331,19 @@ void CocoaWindow::pumpEventsUntil(std::function<bool()> done)
         if (ev)
             [NSApp sendEvent:ev];
     }
+}
+
+std::function<void()> CocoaWindow::testWakeup()
+{
+    // dispatch_async schedules drainTestQueue() on the main run-loop iteration,
+    // serialised with drawRect: and event handlers. Safe to call from any thread.
+    return [this]()
+    {
+        auto* win = this;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            drainTestQueue(win);
+        });
+    };
 }
 
 std::unique_ptr<uc::Window> createWindow()

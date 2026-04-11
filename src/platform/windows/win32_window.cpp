@@ -1,5 +1,6 @@
 #include "win32_window.h"
 #include "win32_render_context.h"
+#include "test_runner.h"
 #include <windowsx.h>
 #include <filesystem>
 
@@ -82,16 +83,16 @@ void Win32Window::close()
     }
 }
 
-void Win32Window::scheduleKeyDown(Key key)
+std::function<void()> Win32Window::testWakeup()
 {
-    // Deliver the key on the main (UI) thread so that handleKeyDown() is
-    // serialised with WM_PAINT.  This prevents data races between the test
-    // thread (which calls scheduleKeyDown) and the render thread that reads
-    // the same DirectoryPanel state (entries, selection, scroll offset).
-    //
+    HWND hwnd = m_hwnd;
     // WM_APP+1 is in the application-defined range (0x8000-0xBFFF).
-    if (m_hwnd)
-        SendMessage(m_hwnd, WM_APP + 1, static_cast<WPARAM>(key), 0);
+    // PostMessage is async: the test thread never blocks waiting for the
+    // main thread to drain the queue.
+    return [hwnd]()
+    {
+        if (hwnd) PostMessage(hwnd, WM_APP + 1, 0, 0);
+    };
 }
 
 // --- Rendering ---
@@ -160,12 +161,11 @@ LRESULT CALLBACK Win32Window::wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
 
-        // --- Test harness key dispatch ---
-        // The test thread calls scheduleKeyDown() which uses SendMessage to
-        // deliver WM_APP+1 here, ensuring handleKeyDown() runs on the main
-        // thread and is serialised with WM_PAINT (no panel data race).
+        // --- Test harness command drain ---
+        // The test thread calls testWakeup() which posts WM_APP+1 here.
+        // drainTestQueue() runs on the main thread, serialised with WM_PAINT.
         case WM_APP + 1:
-            if (self) self->handleKeyDown(static_cast<Key>(wp));
+            if (self) drainTestQueue(self);
             return 0;
 
         // --- Keyboard ---
@@ -260,7 +260,7 @@ LRESULT CALLBACK Win32Window::wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     // Click on an F-key cell: fire the corresponding key.
                     int slot = std::min(mx / cellW, 9);
                     Key key  = static_cast<Key>(static_cast<int>(Key::F1) + slot);
-                    self->scheduleKeyDown(key);
+                    self->handleKeyDown(key);
                 }
                 else
                 {

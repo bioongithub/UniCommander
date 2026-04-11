@@ -23,6 +23,7 @@ public:
     void close()      override;
     void invalidate() override;
     void pumpEventsUntil(std::function<bool()> done) override;
+    std::function<void()> testWakeup()               override;
 
 private:
     NSWindow*         m_window      { nullptr };

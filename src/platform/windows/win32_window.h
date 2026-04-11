@@ -15,8 +15,8 @@ public:
     void run()               override;
     void close()             override;
     void invalidate()        override { InvalidateRect(m_hwnd, nullptr, FALSE); }
-    void scheduleKeyDown(Key key) override;
-    void pumpEventsUntil(std::function<bool()> done) override;
+    void pumpEventsUntil(std::function<bool()> done)   override;
+    std::function<void()> testWakeup()                 override;
 
 private:
     static LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
