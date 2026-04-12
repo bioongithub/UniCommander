@@ -109,16 +109,19 @@ void drainTestQueue(uc::Window* win)
             g_queue.commands.pop();
         }
 
-        bool stop = std::visit([&](auto&& c) -> bool
+        // Quit is checked before the visitor so the lambda can return void
+        // with no unreachable-code warning.
+        if (std::holds_alternative<TestCmd::Quit>(cmd))
+        {
+            if (win) win->close();
+            break;   // do not process commands enqueued after quit
+        }
+
+        std::visit([&](auto&& c)
         {
             using T = std::decay_t<decltype(c)>;
 
-            if constexpr (std::is_same_v<T, TestCmd::Quit>)
-            {
-                if (win) win->close();
-                return true;   // do not process commands enqueued after quit
-            }
-            else if constexpr (std::is_same_v<T, TestCmd::State>)
+            if constexpr (std::is_same_v<T, TestCmd::State>)
             {
                 if (win) std::cout << win->stateSnapshot() << "\n";
             }
@@ -162,10 +165,7 @@ void drainTestQueue(uc::Window* win)
                     base->invalidate();
                 }
             }
-            return false;
         }, cmd);
-
-        if (stop) break;
     }
 }
 
